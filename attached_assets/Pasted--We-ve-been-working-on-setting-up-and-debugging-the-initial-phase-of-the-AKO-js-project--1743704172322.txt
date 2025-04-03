@@ -1,0 +1,69 @@
+
+We've been working on setting up and debugging the initial phase of the AKO.js project (مشروع كودر التفاعلية). Good progress has been made in addressing some core setup issues, but we need to stabilize the application before moving on to major feature development and UI enhancements.
+
+The ultimate goal is to create a powerful, "real" (حقيقي), and user-friendly online interactive coding environment, similar in capability and polish to platforms like CodePen, Replit, and LiveWeave. This means not just fixing bugs, but building out robust features and a modern UI.
+
+Current Status & Recent Fixes:
+
+We've worked on correcting the nesting order of React Context providers (ThemeProvider, AuthProvider, NotificationProvider) in client/src/main.tsx.
+Default values or placeholder logic were added to context hooks (useAuth, useNotification, useTheme) to prevent crashing when context is momentarily unavailable or during initial renders.
+Basic HTML nesting errors in components like Navbar.tsx and Footer.tsx (e.g., <a> inside <Link>) have been addressed.
+Some issues related to useNavigate from wouter were corrected by potentially switching to useLocation or fixing imports.
+Immediate Priorities - Stabilization (What to do NOW):
+
+Before adding new features, we MUST fix these blocking issues:
+
+NotificationContainer Error: The error "useNotification must be used within a NotificationProvider" is still occurring (seen in the last screenshot).
+Action: Please thoroughly investigate why this is happening. Check precisely where NotificationContainer is rendered (likely within MainLayout.tsx or App.tsx) and ensure it is definitely inside the NotificationProvider tree established in main.tsx. Also, review any component directly using the useNotification hook.
+Verify Authentication Flow (401 Error): The previous 401 Unauthorized error when accessing /api/auth/me needs confirmation.
+Action: Test the complete login/authentication flow. Ensure the backend (server/routes.ts, session handling in server/index.ts) correctly establishes and verifies user sessions, and that the frontend AuthProvider correctly manages the user state and makes authenticated API calls. Remove any temporary dummy user workarounds in AuthContext.tsx and ensure the real flow works.
+Confirm WebSocket Connection: The initial setup faced WebSocket connection errors (403 Forbidden).
+Action: Verify that the WebSocket connection (client/src/lib/websocket.ts connecting to the server defined in server/routes.ts) is established successfully after a user is properly authenticated. Test sending and receiving basic messages if possible. Resolve any persistent connection errors.
+Short-Term Goals - Core IDE Functionality (Make it Usable):
+
+Once the application is stable:
+
+Enhance CodeEditor (client/src/components/CodeEditor.tsx):
+Implement essential features: line numbers, syntax highlighting (confirm it works well for HTML/CSS/JS), correct handling of the Tab key (indentation/focus), basic auto-indentation.
+Improve FileExplorer (client/src/components/FileExplorer.tsx):
+Implement UI and corresponding backend API calls for creating, renaming, and deleting files/folders within a project.
+Improve visual display with appropriate file/folder icons.
+Refine PreviewPanel (client/src/components/PreviewPanel.tsx):
+Ensure it reliably renders the HTML/CSS/JS from the editor. Consider using a sandboxed iframe for security and isolation.
+Implement auto-update or a manual refresh button for the preview.
+Project Saving/Loading:
+Implement backend logic (API routes, database interaction) to save and load project files associated with a user.
+Connect the frontend (ProjectsPage.tsx, IDE.tsx) to these APIs.
+Long-Term Vision & Feature Enhancements (Make it like CodePen/Replit):
+
+This is where we make the project truly powerful and achieve the desired comparison:
+
+UI/UX Overhaul:
+Redesign the main IDE page (IDE.tsx) layout to be modern, intuitive, and potentially include resizable panels (like CodePen/Replit).
+Apply consistent, high-quality styling across the entire application using our chosen UI library (e.g., Shadcn/ui, Material UI, etc.). Make it look polished and professional.
+Animated Background: Implement a subtle, performant animated background (like waves, particles, or geometric shapes) potentially on the landing page or as a theme option for the site. Ensure it doesn't negatively impact usability or performance.
+Add More Programming Language Support:
+Plan and implement backend infrastructure to support executing code beyond just frontend JS (e.g., Node.js, Python, possibly others). This involves setting up secure execution environments/sandboxes.
+Update the frontend editor for syntax highlighting and potentially specific features for these languages.
+Real-time Collaboration:
+Leverage the WebSocket connection fully to enable multiple users to edit the same project simultaneously (show collaborator cursors, sync changes in real-time).
+Simulation/Execution Environment ("محاكاة نظام"):
+This is CRITICAL. Implement a robust backend system that can actually run the user's code (HTML/CSS/JS initially, then other languages) and display the output (e.g., a running web server preview, console output for backend languages). This needs careful security considerations (sandboxing).
+Integrated Console:
+Add a console panel within the IDE to display console.log output from the user's frontend JavaScript and potentially stdout/stderr from backend code execution.
+Project Templates & Extensions Marketplace: (From original plan) Revisit this once the core is solid.
+Summary & Call to Action:
+
+Please focus first on fixing the critical stabilization issues (Notification, Auth, WebSocket). Once those are resolved and confirmed working, we can systematically tackle the Core IDE Functionality. After that, we'll move onto the major UI overhaul and advanced features like multi-language support and code execution.
+
+Let's build something truly impressive, making AKO.js a powerful and easy-to-use tool like the best platforms out there. Keep me updated on your progress, especially regarding the stabilization fixes.
+
+Thanks,
+[Your Name/heymoody785]
+
+Explanation for You (heymoody785):
+
+This message clearly tells the developer what needs immediate attention (the blocking bugs).
+It lays out the next logical steps for building basic functionality.
+It incorporates your vision for a high-quality, feature-rich platform, including the animated background, multi-language support ("لغات جديدة"), and the crucial code execution/simulation environment ("محاكاة نظام") to make it truly functional ("حقيقي") like the examples you mentioned.
+It sets expectations for a phased approach: Stabilize -> Build Core -> Enhance & Expand.

@@ -6,8 +6,12 @@ import { WebSocket } from "ws";
 import { z } from "zod";
 import { insertUserSchema, insertProjectSchema, insertFileSchema, insertActivitySchema } from "@shared/schema";
 import { randomBytes } from "crypto";
+import { setupAuth } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup authentication with Passport
+  setupAuth(app);
+  
   const httpServer = createServer(app);
   
   // WebSocket server for real-time collaboration
@@ -55,96 +59,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ws.on('close', () => {
       clients.delete(clientId);
     });
-  });
-  
-  // Authentication routes
-  app.post('/api/auth/register', async (req, res) => {
-    try {
-      const userData = insertUserSchema.parse(req.body);
-      
-      // Check if username already exists
-      const existingUser = await storage.getUserByUsername(userData.username);
-      if (existingUser) {
-        return res.status(409).json({ message: 'Username already exists' });
-      }
-      
-      // Create new user
-      const user = await storage.createUser(userData);
-      
-      // Remove password from response
-      const { password, ...userWithoutPassword } = user;
-      
-      // Create session
-      req.session.userId = user.id;
-      
-      res.status(201).json(userWithoutPassword);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: 'Invalid input', errors: error.errors });
-      }
-      res.status(500).json({ message: 'Server error' });
-    }
-  });
-  
-  app.post('/api/auth/login', async (req, res) => {
-    try {
-      const { username, password } = req.body;
-      
-      if (!username || !password) {
-        return res.status(400).json({ message: 'Username and password are required' });
-      }
-      
-      // Get user
-      const user = await storage.getUserByUsername(username);
-      if (!user) {
-        return res.status(401).json({ message: 'Invalid username or password' });
-      }
-      
-      // Check password (simple comparison for this implementation)
-      if (user.password !== password) {
-        return res.status(401).json({ message: 'Invalid username or password' });
-      }
-      
-      // Create session
-      req.session.userId = user.id;
-      
-      // Remove password from response
-      const { password: _, ...userWithoutPassword } = user;
-      
-      res.json(userWithoutPassword);
-    } catch (error) {
-      res.status(500).json({ message: 'Server error' });
-    }
-  });
-  
-  app.post('/api/auth/logout', (req, res) => {
-    req.session.destroy((err) => {
-      if (err) {
-        return res.status(500).json({ message: 'Failed to logout' });
-      }
-      res.status(200).json({ message: 'Logged out successfully' });
-    });
-  });
-  
-  app.get('/api/auth/me', async (req, res) => {
-    try {
-      const userId = req.session.userId;
-      if (!userId) {
-        return res.status(401).json({ message: 'Not authenticated' });
-      }
-      
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-      
-      // Remove password from response
-      const { password, ...userWithoutPassword } = user;
-      
-      res.json(userWithoutPassword);
-    } catch (error) {
-      res.status(500).json({ message: 'Server error' });
-    }
   });
   
   // Middleware to check authentication
