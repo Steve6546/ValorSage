@@ -30,34 +30,24 @@ const Navbar: React.FC = () => {
       <div className="container mx-auto px-4 py-2 flex justify-between items-center">
         <div className="flex items-center space-x-2 rtl:space-x-reverse">
           {/* Logo */}
-          <Link href="/">
-            <a className="flex items-center">
+          <Link href="/" className="flex items-center">
               <i className="ri-code-box-line text-primary-500 text-2xl"></i>
               <span className="font-heading font-bold text-xl mr-2">AKO.js</span>
-            </a>
           </Link>
           
           {/* Main Navigation */}
           <nav className="hidden md:flex space-x-6 rtl:space-x-reverse">
-            <Link href="/">
-              <a className={`py-2 ${location === "/" ? "text-primary-500 font-medium" : "text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 transition-colors"}`}>
-                لوحة التحكم
-              </a>
+            <Link href="/" className={`py-2 ${location === "/" ? "text-primary-500 font-medium" : "text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 transition-colors"}`}>
+              لوحة التحكم
             </Link>
-            <Link href="/projects">
-              <a className={`py-2 ${location === "/projects" ? "text-primary-500 font-medium" : "text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 transition-colors"}`}>
-                المشاريع
-              </a>
+            <Link href="/projects" className={`py-2 ${location === "/projects" ? "text-primary-500 font-medium" : "text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 transition-colors"}`}>
+              المشاريع
             </Link>
-            <Link href="/community">
-              <a className={`py-2 ${location === "/community" ? "text-primary-500 font-medium" : "text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 transition-colors"}`}>
-                المجتمع
-              </a>
+            <Link href="/community" className={`py-2 ${location === "/community" ? "text-primary-500 font-medium" : "text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 transition-colors"}`}>
+              المجتمع
             </Link>
-            <Link href="/support">
-              <a className={`py-2 ${location === "/support" ? "text-primary-500 font-medium" : "text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 transition-colors"}`}>
-                الدعم
-              </a>
+            <Link href="/support" className={`py-2 ${location === "/support" ? "text-primary-500 font-medium" : "text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 transition-colors"}`}>
+              الدعم
             </Link>
           </nav>
         </div>

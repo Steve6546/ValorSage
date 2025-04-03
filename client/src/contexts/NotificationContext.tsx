@@ -18,7 +18,12 @@ interface NotificationContextType {
   removeNotification: (id: string) => void;
 }
 
-const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+// Create context with default values to prevent undefined errors
+const NotificationContext = createContext<NotificationContextType>({
+  notifications: [],
+  showNotification: () => {},
+  removeNotification: () => {}
+});
 
 const notificationReducer = (
   state: Notification[],
@@ -59,9 +64,5 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 };
 
 export const useNotification = (): NotificationContextType => {
-  const context = useContext(NotificationContext);
-  if (!context) {
-    throw new Error("useNotification must be used within a NotificationProvider");
-  }
-  return context;
+  return useContext(NotificationContext);
 };

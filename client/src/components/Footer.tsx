@@ -15,17 +15,17 @@ const Footer: React.FC = () => {
           </div>
           
           <div className="flex flex-wrap justify-center space-x-6 rtl:space-x-reverse">
-            <Link href="/terms">
-              <a className="text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 text-sm">الشروط والأحكام</a>
+            <Link href="/terms" className="text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 text-sm">
+              الشروط والأحكام
             </Link>
-            <Link href="/privacy">
-              <a className="text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 text-sm">سياسة الخصوصية</a>
+            <Link href="/privacy" className="text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 text-sm">
+              سياسة الخصوصية
             </Link>
-            <Link href="/support">
-              <a className="text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 text-sm">المساعدة</a>
+            <Link href="/support" className="text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 text-sm">
+              المساعدة
             </Link>
-            <Link href="/contact">
-              <a className="text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 text-sm">التواصل</a>
+            <Link href="/contact" className="text-gray-600 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-500 text-sm">
+              التواصل
             </Link>
           </div>
           
