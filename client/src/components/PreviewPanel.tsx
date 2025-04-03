@@ -152,37 +152,38 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   };
 
   return (
-    <div className="w-72 lg:w-96 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 flex flex-col h-full">
-      <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-        <h3 className="font-medium text-sm">معاينة</h3>
-        <div className="flex space-x-2 rtl:space-x-reverse">
-          <Button 
-            variant="ghost"
-            size="icon"
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm"
-            onClick={onRefresh}
-          >
-            <i className="ri-refresh-line"></i>
-          </Button>
-          <Button 
-            variant="ghost"
-            size="icon"
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm"
-            onClick={openInNewWindow}
-          >
-            <i className="ri-external-link-line"></i>
-          </Button>
-        </div>
+    <div className="flex flex-col h-full">
+      <div className="flex-1 h-full overflow-hidden flex flex-col">
+        <iframe 
+          ref={iframeRef}
+          title="معاينة الكود"
+          className="flex-1 w-full h-full bg-white"
+          sandbox="allow-scripts allow-same-origin"
+        />
       </div>
-      
-      <div className="flex-1 overflow-auto p-4">
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow-sm h-full">
-          <iframe 
-            ref={iframeRef}
-            title="معاينة الكود"
-            className="w-full h-full"
-            sandbox="allow-scripts allow-same-origin"
-          />
+      <div className="bg-[#252526] border-t border-[#3c3c3c] p-2 flex justify-between items-center text-[#cccccc]">
+        <div className="text-xs">
+          <span className="px-2 py-1 bg-[#2d2d2e] rounded">مشروع كودر التفاعلية</span>
+        </div>
+        <div className="flex space-x-2">
+          <button 
+            onClick={onRefresh}
+            className="p-1 hover:bg-[#3c3c3c] rounded transition-colors"
+            title="تحديث المعاينة"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button 
+            onClick={openInNewWindow}
+            className="p-1 hover:bg-[#3c3c3c] rounded transition-colors"
+            title="فتح في نافذة جديدة"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
