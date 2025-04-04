@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     error,
     isLoading,
   } = useQuery<User | undefined, Error>({
-    queryKey: ["/api/auth/me"],
+    queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
@@ -60,10 +60,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginMutation = useMutation<Response, Error, LoginData>({
     mutationFn: async (credentials: LoginData) => {
       console.log("Login attempt with:", credentials);
-      return await apiRequest("POST", "/api/auth/login", credentials);
+      return await apiRequest("POST", "/api/login", credentials);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       toast({
         title: "تم تسجيل الدخول بنجاح",
         description: "مرحباً بك في منصة كودر التفاعلية",
@@ -82,10 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const registerMutation = useMutation<Response, Error, RegisterData>({
     mutationFn: async (credentials: RegisterData) => {
       const { confirmPassword, ...registerData } = credentials;
-      return await apiRequest("POST", "/api/auth/register", registerData);
+      return await apiRequest("POST", "/api/register", registerData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       toast({
         title: "تم إنشاء الحساب بنجاح",
         description: "تم إنشاء حسابك بنجاح، مرحباً بك في منصة كودر التفاعلية",
@@ -103,11 +103,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Logout mutation
   const logoutMutation = useMutation<Response, Error, void>({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/auth/logout");
+      return await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.setQueryData(["/api/auth/me"], null);
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.setQueryData(["/api/user"], null);
       toast({
         title: "تم تسجيل الخروج",
         description: "نتمنى لك يوماً سعيداً!",
