@@ -1,12 +1,21 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer } from "ws";
 import { WebSocket } from "ws";
 import { z } from "zod";
-import { insertUserSchema, insertProjectSchema, insertFileSchema, insertActivitySchema } from "@shared/schema";
+import { insertUserSchema, insertProjectSchema, insertFileSchema, insertActivitySchema, User } from "@shared/schema";
 import { randomBytes } from "crypto";
 import { setupAuth } from "./auth";
+
+// Extend Express Request to include authenticated user
+declare global {
+  namespace Express {
+    interface Request {
+      user?: User;
+    }
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication with Passport
@@ -62,17 +71,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Middleware to check authentication
-  const authenticate = (req, res, next) => {
+  const authenticate = (req: Request, res: Response, next: NextFunction) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: 'Authentication required' });
     }
+    
+    // Passport.js guarantees that req.user exists if req.isAuthenticated() is true
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+    
     next();
   };
   
   // Projects routes
-  app.get('/api/projects', authenticate, async (req, res) => {
+  app.get('/api/projects', authenticate, async (req: Request, res: Response) => {
     try {
-      const projects = await storage.getProjectsByUser(req.user.id);
+      const projects = await storage.getProjectsByUser(req.user!.id);
       res.json(projects);
     } catch (error) {
       res.status(500).json({ message: 'Server error' });
