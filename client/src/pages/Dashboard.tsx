@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import ButtonRipple from "@/components/ui/button-ripple";
 import ProjectCard from "@/components/ProjectCard";
@@ -10,29 +10,68 @@ import QuickLinks from "@/components/QuickLinks";
 import { useNotification } from "@/contexts/NotificationContext";
 import { RecentProject, Activity, UsageStats, Collaborator, Project } from "@shared/schema";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 const Dashboard: React.FC = () => {
   const { showNotification } = useNotification();
+  const { user } = useAuth();
   const [_, navigate] = useLocation();
   
   // Fetch recent projects
   const { data: projects = [], isLoading: projectsLoading } = useQuery<RecentProject[]>({
     queryKey: ['/api/projects/recent'],
+    enabled: !!user, // Only fetch when user is authenticated
   });
 
   // Fetch activities
   const { data: activities = [], isLoading: activitiesLoading } = useQuery<Activity[]>({
     queryKey: ['/api/activities'],
+    enabled: !!user, // Only fetch when user is authenticated
   });
 
   // Fetch usage stats
   const { data: usageStats, isLoading: statsLoading } = useQuery<UsageStats>({
     queryKey: ['/api/stats/usage'],
+    enabled: !!user, // Only fetch when user is authenticated
   });
 
   // Fetch collaborators
   const { data: collaborators = [], isLoading: collaboratorsLoading } = useQuery<Collaborator[]>({
     queryKey: ['/api/collaborators'],
+    enabled: !!user, // Only fetch when user is authenticated
+  });
+  
+  // Delete project mutation
+  const deleteProjectMutation = useMutation<number, Error, number>({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/projects/${id}`);
+      return id;
+    },
+    onSuccess: (id) => {
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects/recent'] });
+      
+      showNotification({
+        id: Date.now().toString(),
+        type: "success",
+        title: "تم الحذف",
+        message: "تم حذف المشروع بنجاح",
+        duration: 3000,
+      });
+    },
+    onError: (error) => {
+      console.error("Error deleting project:", error);
+      showNotification({
+        id: Date.now().toString(),
+        type: "error",
+        title: "خطأ",
+        message: "حدث خطأ أثناء حذف المشروع",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
   });
   
   const handleCreateProject = () => {
@@ -50,14 +89,9 @@ const Dashboard: React.FC = () => {
   };
   
   const handleProjectDelete = (id: number) => {
-    // Delete project API call would go here
-    showNotification({
-      id: Date.now().toString(),
-      type: "success",
-      title: "تم الحذف",
-      message: "تم حذف المشروع بنجاح",
-      duration: 3000,
-    });
+    if (window.confirm("هل أنت متأكد من حذف هذا المشروع؟")) {
+      deleteProjectMutation.mutate(id);
+    }
   };
   
   const handleMessageCollaborator = (id: number) => {
@@ -79,7 +113,7 @@ const Dashboard: React.FC = () => {
           <section className="bg-gradient-to-r from-primary-500 to-accent-500 rounded-xl p-6 text-white shadow-lg">
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-2xl font-bold mb-2">مرحباً، أحمد!</h1>
+                <h1 className="text-2xl font-bold mb-2">مرحباً، {user?.username || 'المستخدم'}!</h1>
                 <p className="mb-4 opacity-90">استكمل مشاريعك أو أنشئ مشروعاً جديداً للبدء.</p>
                 
                 {/* Action Buttons */}
