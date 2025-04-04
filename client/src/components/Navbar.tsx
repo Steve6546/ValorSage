@@ -124,26 +124,62 @@ const Navbar: React.FC = () => {
             </DropdownMenuContent>
           </DropdownMenu>
           
-          {/* User Profile */}
+          {/* User Profile / Auth Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center space-x-1 rtl:space-x-reverse">
                 <Avatar>
-                  <AvatarImage src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=80&q=80" alt="صورة المستخدم" />
-                  <AvatarFallback>أح</AvatarFallback>
+                  {user ? (
+                    <AvatarImage src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=80&q=80" alt="صورة المستخدم" />
+                  ) : (
+                    <AvatarFallback className="bg-primary-500 text-white">
+                      <i className="ri-user-line text-lg"></i>
+                    </AvatarFallback>
+                  )}
                 </Avatar>
                 <span className="text-sm font-medium hidden sm:block">
-                  {user?.username || 'أحمد محمد'}
+                  {user ? user.username : 'حسابي'}
                 </span>
                 <i className="ri-arrow-down-s-line text-gray-500"></i>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>حسابي</DropdownMenuLabel>
-              <DropdownMenuItem>الملف الشخصي</DropdownMenuItem>
-              <DropdownMenuItem>الإعدادات</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => logoutMutation.mutate()}>تسجيل الخروج</DropdownMenuItem>
+              {user ? (
+                <>
+                  <DropdownMenuLabel>حسابي</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => console.log('الملف الشخصي')}>
+                    <i className="ri-user-line ml-2"></i>
+                    الملف الشخصي
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => console.log('إعدادات')}>
+                    <i className="ri-settings-3-line ml-2"></i>
+                    الإعدادات
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => logoutMutation.mutate()} className="text-red-500 hover:text-red-600">
+                    <i className="ri-logout-box-line ml-2"></i>
+                    تسجيل الخروج
+                  </DropdownMenuItem>
+                </>
+              ) : (
+                <>
+                  <DropdownMenuLabel>خيارات الحساب</DropdownMenuLabel>
+                  <DropdownMenuItem 
+                    onClick={() => window.location.href = '/auth'} 
+                    className="text-primary-500 hover:text-primary-600 cursor-pointer"
+                  >
+                    <i className="ri-login-box-line ml-2"></i>
+                    تسجيل الدخول
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => window.location.href = '/auth?tab=register'} 
+                    className="text-primary-500 hover:text-primary-600 cursor-pointer"
+                  >
+                    <i className="ri-user-add-line ml-2"></i>
+                    إنشاء حساب جديد
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
