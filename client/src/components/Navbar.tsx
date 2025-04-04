@@ -11,12 +11,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/use-auth";
 
 const Navbar: React.FC = () => {
   const [location] = useLocation();
   const { toggleTheme, theme } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, logoutMutation } = useAuth();
   const [searchText, setSearchText] = useState("");
 
   const handleSearch = (e: React.FormEvent) => {
@@ -109,7 +109,7 @@ const Navbar: React.FC = () => {
               <DropdownMenuItem>الملف الشخصي</DropdownMenuItem>
               <DropdownMenuItem>الإعدادات</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={logout}>تسجيل الخروج</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => logoutMutation.mutate()}>تسجيل الخروج</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
