@@ -6,6 +6,7 @@ export interface Notification {
   title: string;
   message: string;
   duration?: number;
+  variant?: "default" | "destructive";
 }
 
 type NotificationAction =
