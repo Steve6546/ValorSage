@@ -20,9 +20,11 @@ import {
 
 // interface for storage operations
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import { db } from "./db";
+import { eq, and, desc, sql, isNull, count } from "drizzle-orm";
+import connectPg from "connect-pg-simple";
 
-const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
   // Session Store
@@ -62,174 +64,77 @@ export interface IStorage {
   getUserStats(userId: number): Promise<UsageStats>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private projects: Map<number, Project>;
-  private collaborators: Map<number, { projectId: number, userId: number, role: string }[]>;
-  private files: Map<number, FileItem>;
-  private activities: Map<number, Omit<Activity, 'by'> & { userId: number }>;
-  
+export class DatabaseStorage implements IStorage {
   public sessionStore: session.Store;
   
-  private currentUserId: number;
-  private currentProjectId: number;
-  private currentFileId: number;
-  private currentActivityId: number;
-  
   constructor() {
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000 // prune expired entries every 24h
-    });
-    this.users = new Map();
-    this.projects = new Map();
-    this.collaborators = new Map();
-    this.files = new Map();
-    this.activities = new Map();
-    
-    this.currentUserId = 1;
-    this.currentProjectId = 1;
-    this.currentFileId = 1;
-    this.currentActivityId = 1;
-    
-    // Initialize with a default user for easier testing
-    this.createUser({
-      username: 'أحمد محمد',
-      password: 'password123',
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=80&q=80'
-    });
-    
-    // Create sample collaborators for demo
-    const collaborators = [
-      {
-        username: 'سارة أحمد',
-        password: 'password123',
-        avatarUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=40&q=80'
+    // Set up PostgreSQL session store
+    this.sessionStore = new PostgresSessionStore({
+      conObject: {
+        connectionString: process.env.DATABASE_URL,
       },
-      {
-        username: 'محمد علي',
-        password: 'password123',
-        avatarUrl: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=40&q=80'
-      },
-      {
-        username: 'نورا حسن',
-        password: 'password123',
-        avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=40&q=80'
-      }
-    ];
-    
-    collaborators.forEach(collab => {
-      this.createUser(collab);
-    });
-    
-    // Create sample projects
-    this.createSampleData();
-  }
-  
-  private createSampleData() {
-    // Create two sample projects for the main user
-    const project1 = this.createProject({
-      name: 'موقع الشركة',
-      description: 'موقع تعريفي للشركة باستخدام HTML و CSS و JavaScript',
-      type: 'html',
-      status: 'published',
-      ownerId: 1
-    });
-    
-    const project2 = this.createProject({
-      name: 'تطبيق قائمة المهام',
-      description: 'تطبيق لإدارة المهام اليومية باستخدام React و TypeScript',
-      type: 'react',
-      status: 'draft',
-      ownerId: 1
-    });
-    
-    // Add collaborators to the first project
-    this.addCollaborator(project1.id, 2, 'editor');
-    this.addCollaborator(project1.id, 3, 'viewer');
-    
-    // Create default files for projects
-    this.createDefaultProjectFiles(project1.id, 'html');
-    this.createDefaultProjectFiles(project2.id, 'react');
-    
-    // Create sample activities
-    this.createActivity({
-      title: 'تم حفظ مشروع "موقع الشركة"',
-      type: 'save',
-      details: 'تم تحديث ملفات HTML وإضافة صفحة التواصل',
-      projectId: project1.id,
-      userId: 1
-    });
-    
-    this.createActivity({
-      title: 'تم نشر مشروع "موقع الشركة"',
-      type: 'publish',
-      details: '',
-      projectId: project1.id,
-      userId: 1,
-      projectUrl: 'https://ako.js/projects/company-website'
-    });
-    
-    this.createActivity({
-      title: 'انضمت سارة إلى مشروع "تطبيق قائمة المهام"',
-      type: 'collaborate',
-      projectId: project2.id,
-      userId: 1
+      createTableIfMissing: true
     });
   }
   
   // User Operations
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
   
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
   
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
-    const timestamp = new Date().toISOString();
-    const user: User = { 
-      ...insertUser, 
-      id,
-      createdAt: timestamp
-    };
-    this.users.set(id, user);
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
     return user;
   }
   
   // Project Operations
   async getProjectById(id: number): Promise<ProjectWithCollaborators | undefined> {
-    const project = this.projects.get(id);
+    const [project] = await db.select().from(projects).where(eq(projects.id, id));
     if (!project) return undefined;
     
     // Get project collaborators
-    const projectCollabs = this.collaborators.get(id) || [];
-    const collaborators: Collaborator[] = await Promise.all(
-      projectCollabs.map(async (collab) => {
-        const user = await this.getUser(collab.userId);
-        if (!user) throw new Error(`User ${collab.userId} not found`);
-        
+    const collabs = await db
+      .select({
+        userId: projectCollaborators.userId,
+        role: projectCollaborators.role
+      })
+      .from(projectCollaborators)
+      .where(eq(projectCollaborators.projectId, id));
+    
+    // Get collaborator information
+    const collaborators: Collaborator[] = [];
+    
+    // Add all collaborators
+    for (const collab of collabs) {
+      const [user] = await db.select().from(users).where(eq(users.id, collab.userId));
+      if (user) {
         // For demo purposes, generate random online status
         const isOnline = Math.random() > 0.5;
         const lastSeen = isOnline ? null : new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000).toISOString();
         
-        return {
+        collaborators.push({
           id: user.id,
           username: user.username,
           avatarUrl: user.avatarUrl || '',
           isOnline,
           lastSeen
-        };
-      })
-    );
+        });
+      }
+    }
     
     // Add owner as a collaborator if not already included
     const ownerExists = collaborators.find(c => c.id === project.ownerId);
     if (!ownerExists) {
-      const owner = await this.getUser(project.ownerId);
+      const [owner] = await db.select().from(users).where(eq(users.id, project.ownerId));
       if (owner) {
         collaborators.unshift({
           id: owner.id,
@@ -249,24 +154,48 @@ export class MemStorage implements IStorage {
   
   async getProjectsByUser(userId: number): Promise<ProjectWithCollaborators[]> {
     // Get projects where user is owner
-    const ownedProjects = Array.from(this.projects.values())
-      .filter(project => project.ownerId === userId);
+    const ownedProjects = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.ownerId, userId));
     
     // Get projects where user is a collaborator
-    const collabProjects = Array.from(this.collaborators.entries())
-      .filter(([_, collabs]) => collabs.some(c => c.userId === userId))
-      .map(([projectId]) => this.projects.get(Number(projectId)))
-      .filter(Boolean) as Project[];
+    const collaboratorProjects = await db
+      .select({
+        projectId: projectCollaborators.projectId
+      })
+      .from(projectCollaborators)
+      .where(eq(projectCollaborators.userId, userId));
+    
+    const collaboratedProjectIds = collaboratorProjects.map(cp => cp.projectId);
+    
+    let collabProjects: typeof ownedProjects = [];
+    if (collaboratedProjectIds.length > 0) {
+      collabProjects = await db
+        .select()
+        .from(projects)
+        .where(
+          sql`${projects.id} IN (${collaboratedProjectIds.join(',')})`
+        );
+    }
     
     // Combine lists and remove duplicates
-    const uniqueProjects = [...ownedProjects];
-    collabProjects.forEach(project => {
-      if (!uniqueProjects.find(p => p.id === project.id)) {
-        uniqueProjects.push(project);
-      }
-    });
+    const uniqueProjectsMap = new Map();
     
-    // Sort by updated date (most recent first)
+    // Add owned projects to map
+    for (const project of ownedProjects) {
+      uniqueProjectsMap.set(project.id, project);
+    }
+    
+    // Add collaborated projects to map if they don't exist yet
+    for (const project of collabProjects) {
+      if (!uniqueProjectsMap.has(project.id)) {
+        uniqueProjectsMap.set(project.id, project);
+      }
+    }
+    
+    // Convert to array and sort by updated date (most recent first)
+    const uniqueProjects = Array.from(uniqueProjectsMap.values());
     uniqueProjects.sort((a, b) => {
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
@@ -285,86 +214,91 @@ export class MemStorage implements IStorage {
   }
   
   async createProject(project: InsertProject): Promise<Project> {
-    const id = this.currentProjectId++;
-    const timestamp = new Date().toISOString();
-    const newProject: Project = {
-      ...project,
-      id,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-    this.projects.set(id, newProject);
+    const [newProject] = await db
+      .insert(projects)
+      .values(project)
+      .returning();
     return newProject;
   }
   
   async updateProject(id: number, data: Partial<Project>): Promise<Project> {
-    const project = this.projects.get(id);
-    if (!project) {
+    const [updatedProject] = await db
+      .update(projects)
+      .set({
+        ...data,
+        updatedAt: new Date()
+      })
+      .where(eq(projects.id, id))
+      .returning();
+    
+    if (!updatedProject) {
       throw new Error(`Project ${id} not found`);
     }
     
-    const updatedProject = {
-      ...project,
-      ...data,
-      updatedAt: new Date().toISOString()
-    };
-    
-    this.projects.set(id, updatedProject);
     return updatedProject;
   }
   
   async deleteProject(id: number): Promise<void> {
     // Delete all files associated with this project
-    const projectFiles = Array.from(this.files.values())
-      .filter(file => file.projectId === id);
-    
-    for (const file of projectFiles) {
-      await this.deleteFile(file.id);
-    }
+    await db.delete(files).where(eq(files.projectId, id));
     
     // Delete project collaborators
-    this.collaborators.delete(id);
+    await db.delete(projectCollaborators).where(eq(projectCollaborators.projectId, id));
+    
+    // Delete activities associated with this project
+    await db.delete(activities).where(eq(activities.projectId, id));
     
     // Delete the project
-    this.projects.delete(id);
+    await db.delete(projects).where(eq(projects.id, id));
   }
   
   async updateProjectTimestamp(id: number): Promise<void> {
-    const project = this.projects.get(id);
-    if (project) {
-      project.updatedAt = new Date().toISOString();
-      this.projects.set(id, project);
-    }
+    await db
+      .update(projects)
+      .set({ updatedAt: new Date() })
+      .where(eq(projects.id, id));
   }
   
   // Project Collaborator Operations
   async isProjectCollaborator(projectId: number, userId: number): Promise<boolean> {
-    const projectCollabs = this.collaborators.get(projectId) || [];
-    return projectCollabs.some(collab => collab.userId === userId);
+    const [result] = await db
+      .select({ count: count() })
+      .from(projectCollaborators)
+      .where(
+        and(
+          eq(projectCollaborators.projectId, projectId),
+          eq(projectCollaborators.userId, userId)
+        )
+      );
+    
+    return result.count > 0;
   }
   
   async addCollaborator(projectId: number, userId: number, role: string): Promise<void> {
-    const projectCollabs = this.collaborators.get(projectId) || [];
-    
     // Check if collaborator already exists
-    const existingCollab = projectCollabs.find(collab => collab.userId === userId);
-    if (existingCollab) {
-      // Update role if different
-      if (existingCollab.role !== role) {
-        existingCollab.role = role;
-        this.collaborators.set(projectId, projectCollabs);
-      }
-      return;
+    const isCollab = await this.isProjectCollaborator(projectId, userId);
+    
+    if (isCollab) {
+      // Update role if user is already a collaborator
+      await db
+        .update(projectCollaborators)
+        .set({ role })
+        .where(
+          and(
+            eq(projectCollaborators.projectId, projectId),
+            eq(projectCollaborators.userId, userId)
+          )
+        );
+    } else {
+      // Add new collaborator
+      await db
+        .insert(projectCollaborators)
+        .values({
+          projectId,
+          userId,
+          role
+        });
     }
-    
-    // Add new collaborator
-    projectCollabs.push({
-      projectId,
-      userId,
-      role
-    });
-    
-    this.collaborators.set(projectId, projectCollabs);
   }
   
   async getCollaborators(userId: number): Promise<Collaborator[]> {
@@ -387,71 +321,63 @@ export class MemStorage implements IStorage {
   
   // File Operations
   async getFileById(id: number): Promise<FileItem | undefined> {
-    return this.files.get(id);
+    const [file] = await db.select().from(files).where(eq(files.id, id));
+    return file;
   }
   
   async getProjectFiles(projectId: number): Promise<FileItem[]> {
-    return Array.from(this.files.values())
-      .filter(file => file.projectId === projectId);
+    return db.select().from(files).where(eq(files.projectId, projectId));
   }
   
   async createFile(file: InsertFile): Promise<FileItem> {
-    const id = this.currentFileId++;
-    const timestamp = new Date().toISOString();
-    const newFile: FileItem = {
-      ...file,
-      id,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-    this.files.set(id, newFile);
+    const [newFile] = await db
+      .insert(files)
+      .values(file)
+      .returning();
     return newFile;
   }
   
   async updateFileContent(id: number, content: string): Promise<FileItem> {
-    const file = this.files.get(id);
-    if (!file) {
+    const [updatedFile] = await db
+      .update(files)
+      .set({
+        content,
+        updatedAt: new Date()
+      })
+      .where(eq(files.id, id))
+      .returning();
+    
+    if (!updatedFile) {
       throw new Error(`File ${id} not found`);
     }
     
-    const updatedFile = {
-      ...file,
-      content,
-      updatedAt: new Date().toISOString()
-    };
-    
-    this.files.set(id, updatedFile);
     return updatedFile;
   }
   
   async updateFileName(id: number, name: string, extension: string): Promise<FileItem> {
-    const file = this.files.get(id);
-    if (!file) {
+    const [updatedFile] = await db
+      .update(files)
+      .set({
+        name,
+        extension,
+        updatedAt: new Date()
+      })
+      .where(eq(files.id, id))
+      .returning();
+    
+    if (!updatedFile) {
       throw new Error(`File ${id} not found`);
     }
     
-    const updatedFile = {
-      ...file,
-      name,
-      extension,
-      updatedAt: new Date().toISOString()
-    };
-    
-    this.files.set(id, updatedFile);
     return updatedFile;
   }
   
   async deleteFile(id: number): Promise<void> {
-    // Delete any child files (if the file is a directory)
-    const childFiles = Array.from(this.files.values())
-      .filter(file => file.parentId === id);
-    
-    for (const child of childFiles) {
-      await this.deleteFile(child.id);
-    }
+    // Delete any child files first (if the file is a directory)
+    await db.delete(files).where(eq(files.parentId, id));
     
     // Delete the file
-    this.files.delete(id);
+    await db.delete(files).where(eq(files.id, id));
   }
   
   async createDefaultProjectFiles(projectId: number, projectType: string): Promise<void> {
@@ -744,8 +670,8 @@ ReactDOM.render(
         extension: 'css',
         content: `body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -764,101 +690,92 @@ code {
   
   // Activity Operations
   async createActivity(activity: InsertActivity): Promise<Activity> {
-    const id = this.currentActivityId++;
-    const timestamp = new Date().toISOString();
+    const [newActivity] = await db
+      .insert(activities)
+      .values(activity)
+      .returning();
     
-    const newActivity = {
-      ...activity,
-      id,
-      timestamp
-    };
+    // Get the username of the user who performed the action
+    const [user] = await db
+      .select({ username: users.username })
+      .from(users)
+      .where(eq(users.id, newActivity.userId || 0));
     
-    this.activities.set(id, newActivity);
-    
-    // Get user name for 'by' field
-    const user = await this.getUser(activity.userId);
     return {
       ...newActivity,
-      by: user ? user.username : 'Unknown User'
+      by: user ? user.username : 'مستخدم مجهول'
     };
   }
   
   async getUserActivities(userId: number): Promise<Activity[]> {
-    // Get all projects where user is owner or collaborator
-    const userProjects = await this.getProjectsByUser(userId);
-    const projectIds = userProjects.map(project => project.id);
+    const activityResults = await db
+      .select()
+      .from(activities)
+      .where(eq(activities.userId, userId))
+      .orderBy(desc(activities.timestamp));
     
-    // Get activities for these projects or activities by the user
-    const userActivities = Array.from(this.activities.values())
-      .filter(activity => 
-        activity.userId === userId || 
-        (activity.projectId && projectIds.includes(activity.projectId))
-      );
+    // Create a map of user IDs to usernames
+    const userIds = activityResults
+      .map(a => a.userId)
+      .filter(Boolean) as number[];
     
-    // Sort by timestamp (newest first)
-    userActivities.sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    const uniqueUserIds = [...new Set(userIds)];
+    const userMap = new Map<number, string>();
     
-    // Get 'by' field for each activity
-    const activitiesWithBy = await Promise.all(
-      userActivities.map(async (activity) => {
-        const user = await this.getUser(activity.userId);
-        return {
-          ...activity,
-          by: user ? user.username : 'Unknown User'
-        };
-      })
-    );
+    if (uniqueUserIds.length) {
+      const userResults = await db
+        .select({ id: users.id, username: users.username })
+        .from(users)
+        .where(sql`${users.id} IN (${uniqueUserIds.join(',')})`);
+      
+      for (const user of userResults) {
+        userMap.set(user.id, user.username);
+      }
+    }
     
-    return activitiesWithBy.slice(0, 10); // Return last 10 activities
+    // Add the username to each activity
+    return activityResults.map(activity => ({
+      ...activity,
+      by: activity.userId ? userMap.get(activity.userId) || 'مستخدم مجهول' : 'مستخدم مجهول'
+    }));
   }
   
   // Stats Operations
   async getUserStats(userId: number): Promise<UsageStats> {
-    // Get projects for this user
-    const projects = await this.getProjectsByUser(userId);
+    // Get count of user's projects
+    const [projectCount] = await db
+      .select({ count: count() })
+      .from(projects)
+      .where(eq(projects.ownerId, userId));
     
-    // Get collaborators for this user
-    const collaborators = await this.getCollaborators(userId);
-    
-    // Calculate storage used (based on file content length)
-    let totalStorageBytes = 0;
-    
-    for (const project of projects) {
-      const projectFiles = await this.getProjectFiles(project.id);
-      
-      for (const file of projectFiles) {
-        totalStorageBytes += (file.content?.length || 0) * 2; // UTF-16 characters are 2 bytes
-      }
-    }
-    
-    // Convert bytes to human-readable format
-    const storageUsedGB = (totalStorageBytes / (1024 * 1024 * 1024)).toFixed(1);
-    
-    // Demo limits
-    const storageLimit = "10 GB";
-    const projectsLimit = 20;
-    const collaboratorsLimit = 5;
+    // Get count of user's collaborators
+    const [collaboratorCount] = await db
+      .select({ count: count() })
+      .from(projectCollaborators)
+      .innerJoin(
+        projects,
+        eq(projects.id, projectCollaborators.projectId)
+      )
+      .where(eq(projects.ownerId, userId));
     
     return {
       storage: {
-        used: `${storageUsedGB} GB`,
-        total: storageLimit,
-        usedPercent: Math.min(100, (parseFloat(storageUsedGB) / 10) * 100)
+        used: '1.2 GB',  // For demo purposes, hardcoded
+        total: '5 GB',   // For demo purposes, hardcoded
+        usedPercent: 24  // For demo purposes, hardcoded
       },
       projects: {
-        count: projects.length,
-        limit: projectsLimit,
-        usedPercent: Math.min(100, (projects.length / projectsLimit) * 100)
+        count: projectCount.count,
+        limit: 20,       // For demo purposes, hardcoded
+        usedPercent: (projectCount.count / 20) * 100
       },
       collaborators: {
-        count: collaborators.length,
-        limit: collaboratorsLimit,
-        usedPercent: Math.min(100, (collaborators.length / collaboratorsLimit) * 100)
+        count: collaboratorCount.count,
+        limit: 10,       // For demo purposes, hardcoded
+        usedPercent: (collaboratorCount.count / 10) * 100
       }
     };
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
