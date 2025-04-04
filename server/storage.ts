@@ -719,7 +719,15 @@ code {
       .map(a => a.userId)
       .filter(Boolean) as number[];
     
-    const uniqueUserIds = [...new Set(userIds)];
+    // Convert array to Set and back to array to get unique values
+    const uniqueUserIds: number[] = [];
+    const uniqueSet = new Set<number>();
+    for (const id of userIds) {
+      if (!uniqueSet.has(id)) {
+        uniqueSet.add(id);
+        uniqueUserIds.push(id);
+      }
+    }
     const userMap = new Map<number, string>();
     
     if (uniqueUserIds.length) {
