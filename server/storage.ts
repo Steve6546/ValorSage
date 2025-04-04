@@ -91,7 +91,11 @@ export class DatabaseStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db
       .insert(users)
-      .values(insertUser)
+      .values({
+        username: insertUser.username,
+        password: insertUser.password,
+        avatarUrl: insertUser.avatarUrl
+      })
       .returning();
     return user;
   }
@@ -216,18 +220,31 @@ export class DatabaseStorage implements IStorage {
   async createProject(project: InsertProject): Promise<Project> {
     const [newProject] = await db
       .insert(projects)
-      .values(project)
+      .values({
+        name: project.name,
+        description: project.description || "",
+        type: project.type,
+        status: project.status,
+        ownerId: project.ownerId
+      })
       .returning();
     return newProject;
   }
   
   async updateProject(id: number, data: Partial<Project>): Promise<Project> {
+    // استخراج البيانات القابلة للتحديث
+    const { name, description, type, status, ownerId } = data;
+    const updateData: Record<string, any> = {};
+    
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (type !== undefined) updateData.type = type;
+    if (status !== undefined) updateData.status = status;
+    if (ownerId !== undefined) updateData.ownerId = ownerId;
+    
     const [updatedProject] = await db
       .update(projects)
-      .set({
-        ...data,
-        updatedAt: new Date()
-      })
+      .set(updateData)
       .where(eq(projects.id, id))
       .returning();
     
@@ -255,7 +272,9 @@ export class DatabaseStorage implements IStorage {
   async updateProjectTimestamp(id: number): Promise<void> {
     await db
       .update(projects)
-      .set({ updatedAt: new Date() })
+      .set({ 
+        updatedAt: sql`NOW()` 
+      })
       .where(eq(projects.id, id));
   }
   
@@ -332,7 +351,14 @@ export class DatabaseStorage implements IStorage {
   async createFile(file: InsertFile): Promise<FileItem> {
     const [newFile] = await db
       .insert(files)
-      .values(file)
+      .values({
+        name: file.name,
+        type: file.type, 
+        extension: file.extension,
+        content: file.content,
+        projectId: file.projectId,
+        parentId: file.parentId
+      })
       .returning();
     return newFile;
   }
@@ -342,7 +368,7 @@ export class DatabaseStorage implements IStorage {
       .update(files)
       .set({
         content,
-        updatedAt: new Date()
+        updatedAt: sql`NOW()`
       })
       .where(eq(files.id, id))
       .returning();
@@ -360,7 +386,7 @@ export class DatabaseStorage implements IStorage {
       .set({
         name,
         extension,
-        updatedAt: new Date()
+        updatedAt: sql`NOW()`
       })
       .where(eq(files.id, id))
       .returning();
@@ -381,13 +407,40 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createDefaultProjectFiles(projectId: number, projectType: string): Promise<void> {
-    if (projectType === 'html') {
-      // Create a basic HTML project structure
-      await this.createFile({
-        name: 'index.html',
-        type: 'file',
-        extension: 'html',
-        content: `<!DOCTYPE html>
+    // استخدام الـ enum من schema لضمان الاتساق
+    switch(projectType) {
+      case 'html':
+        await this.createHtmlProjectFiles(projectId);
+        break;
+      case 'react':
+        await this.createReactProjectFiles(projectId);
+        break;
+      case 'python':
+        await this.createPythonProjectFiles(projectId);
+        break;
+      case 'nodejs':
+        await this.createNodejsProjectFiles(projectId);
+        break;
+      case 'typescript':
+        await this.createTypescriptProjectFiles(projectId);
+        break;
+      case 'vue':
+        await this.createVueProjectFiles(projectId);
+        break;
+      default:
+        // إذا لم يكن النوع معروفاً، استخدم HTML كنوع افتراضي
+        await this.createHtmlProjectFiles(projectId);
+    }
+  }
+  
+  // دالة مساعدة لإنشاء ملفات مشروع HTML
+  private async createHtmlProjectFiles(projectId: number): Promise<void> {
+    // Create a basic HTML project structure
+    await this.createFile({
+      name: 'index',
+      type: 'file',
+      extension: 'html',
+      content: `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
@@ -411,15 +464,15 @@ export class DatabaseStorage implements IStorage {
   <script src="script.js"></script>
 </body>
 </html>`,
-        projectId,
-        parentId: null
-      });
-      
-      await this.createFile({
-        name: 'styles.css',
-        type: 'file',
-        extension: 'css',
-        content: `body {
+      projectId,
+      parentId: null
+    });
+    
+    await this.createFile({
+      name: 'styles',
+      type: 'file',
+      extension: 'css',
+      content: `body {
   font-family: 'Arial', sans-serif;
   line-height: 1.6;
   margin: 0;
@@ -445,15 +498,15 @@ footer {
   text-align: center;
   font-size: 0.8rem;
 }`,
-        projectId,
-        parentId: null
-      });
-      
-      await this.createFile({
-        name: 'script.js',
-        type: 'file',
-        extension: 'js',
-        content: `// JavaScript Code
+      projectId,
+      parentId: null
+    });
+    
+    await this.createFile({
+      name: 'script',
+      type: 'file',
+      extension: 'js',
+      content: `// JavaScript Code
 console.log('مرحباً بالعالم!');
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -463,16 +516,19 @@ document.addEventListener('DOMContentLoaded', function() {
     alert('مرحباً بك في موقعك الجديد!');
   });
 });`,
-        projectId,
-        parentId: null
-      });
-    } else if (projectType === 'react') {
-      // Create a basic React project structure
-      await this.createFile({
-        name: 'index.html',
-        type: 'file',
-        extension: 'html',
-        content: `<!DOCTYPE html>
+      projectId,
+      parentId: null
+    });
+  }
+  
+  // دالة مساعدة لإنشاء ملفات مشروع React
+  private async createReactProjectFiles(projectId: number): Promise<void> {
+    // Create a basic React project structure
+    await this.createFile({
+      name: 'index',
+      type: 'file',
+      extension: 'html',
+      content: `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
@@ -483,23 +539,23 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="root"></div>
 </body>
 </html>`,
-        projectId,
-        parentId: null
-      });
-      
-      // Create src directory
-      const srcDir = await this.createFile({
-        name: 'src',
-        type: 'directory',
-        projectId,
-        parentId: null
-      });
-      
-      await this.createFile({
-        name: 'App.js',
-        type: 'file',
-        extension: 'js',
-        content: `import React, { useState } from 'react';
+      projectId,
+      parentId: null
+    });
+    
+    // Create src directory
+    const srcDir = await this.createFile({
+      name: 'src',
+      type: 'directory',
+      projectId,
+      parentId: null
+    });
+    
+    await this.createFile({
+      name: 'App',
+      type: 'file',
+      extension: 'js',
+      content: `import React, { useState } from 'react';
 import './App.css';
 
 function App() {
@@ -561,15 +617,15 @@ function App() {
 }
 
 export default App;`,
-        projectId,
-        parentId: srcDir.id
-      });
-      
-      await this.createFile({
-        name: 'App.css',
-        type: 'file',
-        extension: 'css',
-        content: `.app {
+      projectId,
+      parentId: srcDir.id
+    });
+    
+    await this.createFile({
+      name: 'App',
+      type: 'file',
+      extension: 'css',
+      content: `.app {
   max-width: 500px;
   margin: 0 auto;
   padding: 20px;
@@ -641,15 +697,15 @@ h1 {
   text-align: center;
   color: #888;
 }`,
-        projectId,
-        parentId: srcDir.id
-      });
-      
-      await this.createFile({
-        name: 'index.js',
-        type: 'file',
-        extension: 'js',
-        content: `import React from 'react';
+      projectId,
+      parentId: srcDir.id
+    });
+    
+    await this.createFile({
+      name: 'index',
+      type: 'file',
+      extension: 'js',
+      content: `import React from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
 import App from './App';
@@ -660,15 +716,15 @@ ReactDOM.render(
   </React.StrictMode>,
   document.getElementById('root')
 );`,
-        projectId,
-        parentId: srcDir.id
-      });
-      
-      await this.createFile({
-        name: 'index.css',
-        type: 'file',
-        extension: 'css',
-        content: `body {
+      projectId,
+      parentId: srcDir.id
+    });
+    
+    await this.createFile({
+      name: 'index',
+      type: 'file',
+      extension: 'css',
+      content: `body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
     Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -682,10 +738,545 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }`,
-        projectId,
-        parentId: srcDir.id
-      });
+      projectId,
+      parentId: srcDir.id
+    });
+  }
+  
+  // دالة مساعدة لإنشاء ملفات مشروع Python
+  private async createPythonProjectFiles(projectId: number): Promise<void> {
+    // إنشاء الملف الرئيسي
+    await this.createFile({
+      name: 'main',
+      type: 'file',
+      extension: 'py',
+      content: `# مرحباً بك في مشروع Python الجديد
+
+def main():
+    print("مرحباً بالعالم من Python!")
+    name = input("ما هو اسمك؟ ")
+    print(f"مرحباً بك {name}!")
+    
+    # مثال على استخدام الشروط
+    age = input("كم عمرك؟ ")
+    try:
+        age = int(age)
+        if age < 18:
+            print("أنت لازلت صغيراً!")
+        else:
+            print("أنت بالغ!")
+    except ValueError:
+        print("الرجاء إدخال رقم صحيح للعمر")
+
+if __name__ == "__main__":
+    main()
+`,
+      projectId,
+      parentId: null,
+    });
+
+    // إنشاء ملف للدوال المساعدة
+    await this.createFile({
+      name: 'utils',
+      type: 'file',
+      extension: 'py',
+      content: `# ملف للدوال المساعدة
+
+def calculate_sum(numbers):
+    """
+    حساب مجموع قائمة من الأرقام
+    """
+    return sum(numbers)
+
+def calculate_average(numbers):
+    """
+    حساب متوسط قائمة من الأرقام
+    """
+    if not numbers:
+        return 0
+    return sum(numbers) / len(numbers)
+
+def is_prime(n):
+    """
+    التحقق ما إذا كان الرقم أولياً
+    """
+    if n <= 1:
+        return False
+    if n <= 3:
+        return True
+    if n % 2 == 0 or n % 3 == 0:
+        return False
+    i = 5
+    while i * i <= n:
+        if n % i == 0 or n % (i + 2) == 0:
+            return False
+        i += 6
+    return True
+`,
+      projectId,
+      parentId: null,
+    });
+
+    // إنشاء ملف للتجارب وللاختبارات
+    await this.createFile({
+      name: 'test',
+      type: 'file',
+      extension: 'py',
+      content: `# ملف للاختبارات
+
+import utils
+
+def test_calculate_sum():
+    assert utils.calculate_sum([1, 2, 3, 4, 5]) == 15
+    print("اختبار calculate_sum نجح!")
+
+def test_calculate_average():
+    assert utils.calculate_average([1, 2, 3, 4, 5]) == 3
+    print("اختبار calculate_average نجح!")
+
+def test_is_prime():
+    assert utils.is_prime(7) == True
+    assert utils.is_prime(10) == False
+    print("اختبار is_prime نجح!")
+
+if __name__ == "__main__":
+    print("بدء تشغيل الاختبارات...")
+    test_calculate_sum()
+    test_calculate_average()
+    test_is_prime()
+    print("جميع الاختبارات نجحت!")
+`,
+      projectId,
+      parentId: null,
+    });
+  }
+  
+  // دالة مساعدة لإنشاء ملفات مشروع Node.js
+  private async createNodejsProjectFiles(projectId: number): Promise<void> {
+    // إنشاء ملف package.json
+    await this.createFile({
+      name: 'package',
+      type: 'file',
+      extension: 'json',
+      content: `{
+  "name": "nodejs-project",
+  "version": "1.0.0",
+  "description": "مشروع Node.js بسيط",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}`,
+      projectId,
+      parentId: null,
+    });
+
+    // إنشاء الملف الرئيسي
+    await this.createFile({
+      name: 'index',
+      type: 'file',
+      extension: 'js',
+      content: `// مشروع Node.js بسيط
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+
+// ضبط الخادم لاستقبال البيانات بتنسيق JSON
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// توجيه بسيط
+app.get('/', (req, res) => {
+  res.json({ message: 'مرحباً بك في خادم Node.js الخاص بك!' });
+});
+
+// مسار API بسيط
+app.get('/api/users', (req, res) => {
+  const users = [
+    { id: 1, name: 'أحمد' },
+    { id: 2, name: 'محمد' },
+    { id: 3, name: 'سارة' }
+  ];
+  res.json(users);
+});
+
+// استقبال بيانات من المستخدم
+app.post('/api/users', (req, res) => {
+  const { name } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'الرجاء إدخال اسم المستخدم' });
+  }
+  
+  // في تطبيق حقيقي، سيتم إضافة المستخدم إلى قاعدة البيانات
+  res.status(201).json({ id: Date.now(), name });
+});
+
+// تشغيل الخادم
+app.listen(port, () => {
+  console.log(\`الخادم يعمل على المنفذ \${port}\`);
+});`,
+      projectId,
+      parentId: null,
+    });
+  }
+  
+  // دالة مساعدة لإنشاء ملفات مشروع TypeScript
+  private async createTypescriptProjectFiles(projectId: number): Promise<void> {
+    // إنشاء ملف tsconfig.json
+    await this.createFile({
+      name: 'tsconfig',
+      type: 'file',
+      extension: 'json',
+      content: `{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}`,
+      projectId,
+      parentId: null,
+    });
+
+    // إنشاء ملف package.json
+    await this.createFile({
+      name: 'package',
+      type: 'file',
+      extension: 'json',
+      content: `{
+  "name": "typescript-project",
+  "version": "1.0.0",
+  "description": "مشروع TypeScript بسيط",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "watch": "tsc -w"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.17",
+    "@types/node": "^18.15.11",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.4"
+  }
+}`,
+      projectId,
+      parentId: null,
+    });
+
+    // إنشاء مجلد المصدر
+    const srcDir = await this.createFile({
+      name: 'src',
+      type: 'directory',
+      projectId,
+      parentId: null,
+    });
+
+    // إنشاء الملف الرئيسي
+    await this.createFile({
+      name: 'index',
+      type: 'file',
+      extension: 'ts',
+      content: `// مشروع TypeScript بسيط
+import express, { Request, Response } from 'express';
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+// ضبط الخادم لاستقبال البيانات بتنسيق JSON
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// تعريف الأنواع
+interface User {
+  id: number;
+  name: string;
+  email?: string;
+}
+
+// توجيه بسيط
+app.get('/', (req: Request, res: Response) => {
+  res.json({ message: 'مرحباً بك في خادم TypeScript الخاص بك!' });
+});
+
+// مسار API بسيط
+app.get('/api/users', (req: Request, res: Response) => {
+  const users: User[] = [
+    { id: 1, name: 'أحمد' },
+    { id: 2, name: 'محمد' },
+    { id: 3, name: 'سارة' }
+  ];
+  res.json(users);
+});
+
+// استقبال بيانات من المستخدم
+app.post('/api/users', (req: Request, res: Response) => {
+  const { name, email } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'الرجاء إدخال اسم المستخدم' });
+  }
+  
+  // في تطبيق حقيقي، سيتم إضافة المستخدم إلى قاعدة البيانات
+  const newUser: User = { id: Date.now(), name, email };
+  res.status(201).json(newUser);
+});
+
+// تشغيل الخادم
+app.listen(port, () => {
+  console.log(\`الخادم يعمل على المنفذ \${port}\`);
+});`,
+      projectId,
+      parentId: srcDir.id,
+    });
+  }
+  
+  // دالة مساعدة لإنشاء ملفات مشروع Vue.js
+  private async createVueProjectFiles(projectId: number): Promise<void> {
+    // إنشاء ملف index.html
+    await this.createFile({
+      name: 'index',
+      type: 'file',
+      extension: 'html',
+      content: `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مشروع Vue.js</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- سيتم استبدال هذا بتطبيق Vue -->
+  </div>
+  
+  <script src="main.js"></script>
+</body>
+</html>`,
+      projectId,
+      parentId: null,
+    });
+
+    // إنشاء ملف JavaScript الرئيسي
+    await this.createFile({
+      name: 'main',
+      type: 'file',
+      extension: 'js',
+      content: `// التطبيق الرئيسي Vue
+
+const { createApp, ref, computed } = Vue;
+
+const app = createApp({
+  setup() {
+    const newTask = ref('');
+    const tasks = ref([
+      { id: 1, text: 'تعلم Vue.js', completed: false },
+      { id: 2, text: 'إنشاء مشروع', completed: false },
+      { id: 3, text: 'نشر المشروع', completed: false }
+    ]);
+    
+    const remainingTasks = computed(() => {
+      return tasks.value.filter(task => !task.completed).length;
+    });
+    
+    function addTask() {
+      if (newTask.value.trim()) {
+        const newId = tasks.value.length ? Math.max(...tasks.value.map(t => t.id)) + 1 : 1;
+        tasks.value.push({
+          id: newId,
+          text: newTask.value,
+          completed: false
+        });
+        newTask.value = '';
+      }
     }
+    
+    function removeTask(id) {
+      tasks.value = tasks.value.filter(task => task.id !== id);
+    }
+    
+    function toggleComplete(id) {
+      const task = tasks.value.find(task => task.id === id);
+      if (task) {
+        task.completed = !task.completed;
+      }
+    }
+    
+    return {
+      newTask,
+      tasks,
+      remainingTasks,
+      addTask,
+      removeTask,
+      toggleComplete
+    };
+  },
+  template: \`
+    <div class="todo-app">
+      <h1>قائمة المهام</h1>
+      
+      <div class="add-task">
+        <input 
+          v-model="newTask" 
+          @keyup.enter="addTask"
+          placeholder="أضف مهمة جديدة..."
+        />
+        <button @click="addTask">إضافة</button>
+      </div>
+      
+      <ul class="task-list">
+        <li v-for="task in tasks" :key="task.id" :class="{ completed: task.completed }">
+          <span class="task-text" @click="toggleComplete(task.id)">{{ task.text }}</span>
+          <button class="delete-btn" @click="removeTask(task.id)">×</button>
+        </li>
+      </ul>
+      
+      <div class="task-counter">
+        المهام المتبقية: {{ remainingTasks }}
+      </div>
+    </div>
+  \`
+});
+
+app.mount('#app');`,
+      projectId,
+      parentId: null,
+    });
+
+    // إنشاء ملف CSS
+    await this.createFile({
+      name: 'styles',
+      type: 'file',
+      extension: 'css',
+      content: `body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f9f9f9;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.todo-app {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 500px;
+  margin: 20px;
+  padding: 20px;
+}
+
+h1 {
+  color: #42b983;
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.add-task {
+  display: flex;
+  margin-bottom: 20px;
+}
+
+input {
+  flex-grow: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+button {
+  background-color: #42b983;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 4px;
+  margin-right: 8px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.task-list {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.task-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background-color: #f5f5f5;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.task-list li:hover {
+  background-color: #eee;
+}
+
+.task-text {
+  cursor: pointer;
+  flex-grow: 1;
+}
+
+.completed .task-text {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.delete-btn {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  text-align: center;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+}
+
+.task-counter {
+  margin-top: 20px;
+  color: #666;
+  font-size: 14px;
+  text-align: center;
+}`,
+      projectId,
+      parentId: null,
+    });
   }
   
   // Activity Operations

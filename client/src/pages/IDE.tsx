@@ -7,7 +7,7 @@ import PreviewPanel from "@/components/PreviewPanel";
 import CreationDialog from "@/components/CreationDialog";
 import { useNotification } from "@/contexts/NotificationContext";
 import { useWebSocket } from "@/lib/websocket";
-import { FileItem, Project, FileType } from "@shared/schema";
+import { FileItem, Project, ProjectWithCollaborators, FileType } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 
 interface IDEParams {
@@ -32,7 +32,7 @@ const IDE: React.FC = () => {
   }>({ parentId: null, resourceType: FileType.FILE });
   
   // Fetch project details
-  const { data: project, isLoading: projectLoading } = useQuery<Project & { collaborators: any[] }>({
+  const { data: project, isLoading: projectLoading } = useQuery<ProjectWithCollaborators>({
     queryKey: [`/api/projects/${projectId}`],
   });
   

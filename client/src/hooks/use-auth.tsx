@@ -59,15 +59,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Login mutation
   const loginMutation = useMutation<Response, Error, LoginData>({
     mutationFn: async (credentials: LoginData) => {
-      console.log("Login attempt with:", credentials);
       return await apiRequest("POST", "/api/login", credentials);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      toast({
-        title: "تم تسجيل الدخول بنجاح",
-        description: "مرحباً بك في منصة كودر التفاعلية",
-      });
+    onSuccess: async (response) => {
+      try {
+        const userData = await response.json();
+        // تحديث بيانات المستخدم مباشرة في React Query
+        queryClient.setQueryData(["/api/user"], userData);
+        
+        toast({
+          title: "تم تسجيل الدخول بنجاح",
+          description: `مرحباً ${userData.username}!`,
+        });
+      } catch (err) {
+        console.error("Error parsing user data:", err);
+        // في حالة حدوث خطأ، سنعيد تحميل البيانات
+        queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -84,12 +92,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { confirmPassword, ...registerData } = credentials;
       return await apiRequest("POST", "/api/register", registerData);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      toast({
-        title: "تم إنشاء الحساب بنجاح",
-        description: "تم إنشاء حسابك بنجاح، مرحباً بك في منصة كودر التفاعلية",
-      });
+    onSuccess: async (response) => {
+      try {
+        const userData = await response.json();
+        // تحديث بيانات المستخدم مباشرة في React Query
+        queryClient.setQueryData(["/api/user"], userData);
+        
+        toast({
+          title: "تم إنشاء الحساب بنجاح",
+          description: `مرحباً ${userData.username}، تم إنشاء حسابك بنجاح!`,
+        });
+      } catch (err) {
+        console.error("Error parsing user data:", err);
+        // في حالة حدوث خطأ، سنعيد تحميل البيانات
+        queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      }
     },
     onError: (error: Error) => {
       toast({
