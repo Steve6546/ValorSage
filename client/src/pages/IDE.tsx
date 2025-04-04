@@ -4,9 +4,10 @@ import { useParams } from "wouter";
 import FileExplorer from "@/components/FileExplorer";
 import CodeEditor from "@/components/CodeEditor";
 import PreviewPanel from "@/components/PreviewPanel";
+import CreationDialog from "@/components/CreationDialog";
 import { useNotification } from "@/contexts/NotificationContext";
 import { useWebSocket } from "@/lib/websocket";
-import { FileItem, Project } from "@shared/schema";
+import { FileItem, Project, FileType } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 
 interface IDEParams {
@@ -23,6 +24,12 @@ const IDE: React.FC = () => {
   const [openFiles, setOpenFiles] = useState<FileItem[]>([]);
   const [localFiles, setLocalFiles] = useState<FileItem[]>([]);
   const [refreshPreview, setRefreshPreview] = useState<number>(0);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createDialogParams, setCreateDialogParams] = useState<{
+    parentId: number | null;
+    resourceType: FileType;
+    parentFolderName?: string;
+  }>({ parentId: null, resourceType: FileType.FILE });
   
   // Fetch project details
   const { data: project, isLoading: projectLoading } = useQuery<Project & { collaborators: any[] }>({
@@ -161,26 +168,47 @@ const IDE: React.FC = () => {
     }
   };
   
-  const handleCreateFile = async (parentId: number | null) => {
-    const fileName = prompt("اسم الملف الجديد:");
-    if (!fileName) return;
+  const handleCreateFile = async (parentId: number | null, fileType: FileType = FileType.FILE) => {
+    // Set the parent folder name for the dialog if a parentId is provided
+    let parentFolderName;
+    if (parentId !== null) {
+      const parentFolder = localFiles.find(f => f.id === parentId);
+      parentFolderName = parentFolder?.name;
+    }
     
+    setCreateDialogParams({
+      parentId,
+      resourceType: fileType,
+      parentFolderName
+    });
+    setCreateDialogOpen(true);
+  };
+  
+  const handleCreateFileSubmit = async (name: string, extension: string, type: FileType) => {
     try {
+      const { parentId } = createDialogParams;
+      const fileName = type === FileType.DIRECTORY ? name : `${name}${extension ? `.${extension}` : ''}`;
+      
       const response = await apiRequest("POST", `/api/projects/${projectId}/files`, {
         name: fileName,
         parentId,
+        type,
         content: ""
       });
       
       const newFile: FileItem = await response.json();
-      setLocalFiles([...localFiles, newFile]);
-      handleFileSelect(newFile);
+      setLocalFiles(prev => [...prev, newFile]);
+      
+      // If it's a file (not a directory), open it for editing
+      if (type === FileType.FILE) {
+        handleFileSelect(newFile);
+      }
       
       showNotification({
         id: Date.now().toString(),
         type: "success",
         title: "تم الإنشاء",
-        message: `تم إنشاء الملف ${fileName} بنجاح`,
+        message: `تم إنشاء ${type === FileType.DIRECTORY ? 'المجلد' : 'الملف'} ${fileName} بنجاح`,
         duration: 3000,
       });
     } catch (error) {
@@ -189,7 +217,55 @@ const IDE: React.FC = () => {
         id: Date.now().toString(),
         type: "error",
         title: "خطأ",
-        message: "حدث خطأ أثناء إنشاء الملف",
+        message: `حدث خطأ أثناء إنشاء ${type === FileType.DIRECTORY ? 'المجلد' : 'الملف'}`,
+        duration: 3000,
+      });
+    }
+  };
+  
+  const handleMoveFile = async (fileId: number, targetFolderId: number | null) => {
+    try {
+      // Source file must exist
+      const sourceFile = localFiles.find(f => f.id === fileId);
+      if (!sourceFile) return;
+      
+      // If moving to a target folder, it must exist and be a directory
+      if (targetFolderId !== null) {
+        const targetFolder = localFiles.find(f => f.id === targetFolderId);
+        if (!targetFolder || targetFolder.type !== FileType.DIRECTORY) return;
+      }
+      
+      // Cannot move to the same parent
+      if (sourceFile.parentId === targetFolderId) return;
+      
+      // Send the API request to move the file
+      await apiRequest("PUT", `/api/projects/${projectId}/files/${fileId}`, {
+        parentId: targetFolderId
+      });
+      
+      // Update local state
+      setLocalFiles(prev => 
+        prev.map(f => 
+          f.id === fileId 
+            ? { ...f, parentId: targetFolderId }
+            : f
+        )
+      );
+      
+      showNotification({
+        id: Date.now().toString(),
+        type: "success",
+        title: "تم النقل",
+        message: `تم نقل ${sourceFile.type === FileType.DIRECTORY ? 'المجلد' : 'الملف'} ${sourceFile.name} بنجاح`,
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error("Error moving file:", error);
+      showNotification({
+        id: Date.now().toString(),
+        type: "error",
+        title: "خطأ",
+        message: "حدث خطأ أثناء نقل الملف",
         duration: 3000,
       });
     }
@@ -327,7 +403,7 @@ const IDE: React.FC = () => {
           <div className="p-2 border-b border-[#3c3c3c] flex justify-between items-center">
             <h2 className="font-medium text-sm uppercase">Files</h2>
             <button 
-              onClick={() => handleCreateFile(null)} 
+              onClick={() => handleCreateFile(null, FileType.FILE)} 
               className="p-1 rounded hover:bg-[#3c3c3c] transition-colors"
               title="New File"
             >
@@ -344,6 +420,7 @@ const IDE: React.FC = () => {
               onCreateFile={handleCreateFile}
               onRenameFile={handleRenameFile}
               onDeleteFile={handleDeleteFile}
+              onMoveFile={handleMoveFile}
             />
           </div>
         </div>
@@ -395,7 +472,7 @@ const IDE: React.FC = () => {
                   </svg>
                   <p className="text-[#6e6e6e]">اختر ملفاً للبدء في التحرير</p>
                   <button 
-                    onClick={() => handleCreateFile(null)}
+                    onClick={() => handleCreateFile(null, FileType.FILE)}
                     className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
                   >
                     إنشاء ملف جديد
@@ -443,6 +520,15 @@ const IDE: React.FC = () => {
           </svg> main</span>
         </div>
       </div>
+      
+      {/* Creation Dialog */}
+      <CreationDialog 
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onConfirm={handleCreateFileSubmit}
+        resourceType={createDialogParams.resourceType}
+        parentFolder={createDialogParams.parentFolderName}
+      />
     </div>
   );
 };

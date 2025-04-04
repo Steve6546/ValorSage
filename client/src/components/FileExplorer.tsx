@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { 
   ContextMenu,
@@ -6,16 +6,23 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuShortcut,
 } from "@/components/ui/context-menu";
 import { FileItem, FileType } from "@shared/schema";
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 
 interface FileExplorerProps {
   files: FileItem[];
   selectedFile?: FileItem;
   onFileSelect: (file: FileItem) => void;
-  onCreateFile?: (parentId: number | null) => void;
+  onCreateFile?: (parentId: number | null, fileType: FileType) => void;
   onRenameFile?: (fileId: number) => void;
   onDeleteFile?: (fileId: number) => void;
+  onMoveFile?: (fileId: number, targetFolderId: number | null) => void;
 }
 
 const FileIcon: React.FC<{ file: FileItem }> = ({ file }) => {
@@ -68,21 +75,132 @@ const FileIcon: React.FC<{ file: FileItem }> = ({ file }) => {
   );
 };
 
+// Draggable Item component with drag and drop functionality
+interface DraggableItemProps {
+  file: FileItem;
+  onDrop: (fileId: number, targetId: number | null) => void;
+  selectedFile?: FileItem;
+  onFileSelect: (file: FileItem) => void;
+  expandedFolders: Record<number, boolean>;
+  toggleFolder: (id: number) => void;
+  children?: React.ReactNode;
+}
+
+const DraggableItem: React.FC<DraggableItemProps> = ({
+  file,
+  onDrop,
+  selectedFile,
+  onFileSelect,
+  expandedFolders,
+  toggleFolder,
+  children
+}) => {
+  const [{ isDragging }, drag] = useDrag({
+    type: 'FILE',
+    item: { id: file.id, type: file.type },
+    collect: (monitor) => ({
+      isDragging: !!monitor.isDragging(),
+    }),
+  });
+  
+  const [{ isOver, canDrop }, drop] = useDrop({
+    accept: 'FILE',
+    canDrop: (item: { id: number, type: string }) => {
+      // Can't drop on self or files (only on directories)
+      return file.type === FileType.DIRECTORY && item.id !== file.id;
+    },
+    drop: (item: { id: number }, monitor) => {
+      if (!monitor.didDrop()) {
+        onDrop(item.id, file.id);
+      }
+      return { id: file.id };
+    },
+    collect: (monitor) => ({
+      isOver: !!monitor.isOver({ shallow: true }),
+      canDrop: !!monitor.canDrop(),
+    }),
+  });
+  
+  const isActive = isOver && canDrop;
+  const opacity = isDragging ? 0.5 : 1;
+  
+  const itemRef = useRef<HTMLDivElement>(null);
+  const combinedRef = file.type === FileType.DIRECTORY 
+    ? (el: HTMLDivElement) => { drag(el); drop(el); if (itemRef.current) itemRef.current = el; }
+    : (el: HTMLDivElement) => { drag(el); if (itemRef.current) itemRef.current = el; };
+  
+  return (
+    <div 
+      ref={combinedRef}
+      style={{ opacity }} 
+      className={cn(
+        file.type === FileType.DIRECTORY && isActive ? "border border-blue-500 rounded" : "",
+        file.type === FileType.DIRECTORY && canDrop ? "bg-[#2a2d2e]/30" : ""
+      )}
+    >
+      {file.type === FileType.DIRECTORY ? (
+        <div 
+          onClick={() => toggleFolder(file.id)}
+          className="flex items-center text-sm py-1 px-2 hover:bg-[#2a2d2e] rounded cursor-pointer group"
+        >
+          <span className="mr-1 text-[#6e768e] group-hover:text-white">
+            {expandedFolders[file.id] ? (
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 9L12 16L5 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </span>
+          <FileIcon file={file} />
+          <span className="text-[#cccccc] group-hover:text-white">{file.name}</span>
+        </div>
+      ) : (
+        <div 
+          onClick={() => onFileSelect(file)}
+          className={cn(
+            "flex items-center text-sm py-1 px-2 hover:bg-[#2a2d2e] rounded cursor-pointer my-1 group",
+            selectedFile?.id === file.id && "bg-[#37373d]"
+          )}
+        >
+          <FileIcon file={file} />
+          <span className={cn(
+            "text-[#cccccc] group-hover:text-white truncate",
+            selectedFile?.id === file.id && "text-white"
+          )}>
+            {file.name}
+          </span>
+        </div>
+      )}
+      {children}
+    </div>
+  );
+};
+
 const FileExplorer: React.FC<FileExplorerProps> = ({
   files,
   selectedFile,
   onFileSelect,
   onCreateFile,
   onRenameFile,
-  onDeleteFile
+  onDeleteFile,
+  onMoveFile
 }) => {
   const [expandedFolders, setExpandedFolders] = useState<Record<number, boolean>>({});
   
   const toggleFolder = (folderId: number) => {
-    setExpandedFolders({
-      ...expandedFolders,
-      [folderId]: !expandedFolders[folderId]
-    });
+    setExpandedFolders(prev => ({
+      ...prev,
+      [folderId]: !prev[folderId]
+    }));
+  };
+  
+  const handleFileDrop = (fileId: number, targetFolderId: number | null) => {
+    if (onMoveFile) {
+      onMoveFile(fileId, targetFolderId);
+    }
   };
 
   const renderFileTree = (items: FileItem[], parentId: number | null = null, level = 0) => {
@@ -96,58 +214,67 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 <ContextMenuTrigger>
                   {file.type === FileType.DIRECTORY ? (
                     <li className="my-1">
-                      <div 
-                        onClick={() => toggleFolder(file.id)}
-                        className="flex items-center text-sm py-1 px-2 hover:bg-[#2a2d2e] rounded cursor-pointer group"
+                      <DraggableItem 
+                        file={file}
+                        onDrop={handleFileDrop}
+                        selectedFile={selectedFile}
+                        onFileSelect={onFileSelect}
+                        expandedFolders={expandedFolders}
+                        toggleFolder={toggleFolder}
                       >
-                        <span className="mr-1 text-[#6e768e] group-hover:text-white">
-                          {expandedFolders[file.id] ? (
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M19 9L12 16L5 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          ) : (
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          )}
-                        </span>
-                        <FileIcon file={file} />
-                        <span className="text-[#cccccc] group-hover:text-white">{file.name}</span>
-                      </div>
-                      {expandedFolders[file.id] && 
-                        renderFileTree(items, file.id, level + 1)
-                      }
+                        {expandedFolders[file.id] && 
+                          renderFileTree(items, file.id, level + 1)
+                        }
+                      </DraggableItem>
                     </li>
                   ) : (
-                    <li 
-                      onClick={() => onFileSelect(file)}
-                      className={cn(
-                        "flex items-center text-sm py-1 px-2 hover:bg-[#2a2d2e] rounded cursor-pointer my-1 group ml-4",
-                        selectedFile?.id === file.id && "bg-[#37373d]"
-                      )}
-                    >
-                      <FileIcon file={file} />
-                      <span className={cn(
-                        "text-[#cccccc] group-hover:text-white",
-                        selectedFile?.id === file.id && "text-white"
-                      )}>
-                        {file.name}
-                      </span>
+                    <li className="ml-4">
+                      <DraggableItem
+                        file={file}
+                        onDrop={handleFileDrop}
+                        selectedFile={selectedFile}
+                        onFileSelect={onFileSelect}
+                        expandedFolders={expandedFolders}
+                        toggleFolder={toggleFolder}
+                      />
                     </li>
                   )}
                 </ContextMenuTrigger>
                 <ContextMenuContent className="bg-[#252526] border-[#3c3c3c] text-[#cccccc]">
                   {file.type === FileType.DIRECTORY && (
                     <>
-                      <ContextMenuItem 
-                        onClick={() => onCreateFile && onCreateFile(file.id)}
-                        className="hover:bg-[#2a2d2e] hover:text-white focus:bg-[#2a2d2e] focus:text-white"
-                      >
-                        <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 6V18M18 12H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                        إنشاء ملف جديد
-                      </ContextMenuItem>
+                      <ContextMenuSub>
+                        <ContextMenuSubTrigger
+                          className="hover:bg-[#2a2d2e] hover:text-white focus:bg-[#2a2d2e] focus:text-white"
+                        >
+                          <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 6V18M18 12H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          إنشاء جديد
+                        </ContextMenuSubTrigger>
+                        <ContextMenuSubContent className="bg-[#252526] border-[#3c3c3c] text-[#cccccc]">
+                          <ContextMenuItem 
+                            onClick={() => onCreateFile && onCreateFile(file.id, FileType.FILE)}
+                            className="hover:bg-[#2a2d2e] hover:text-white focus:bg-[#2a2d2e] focus:text-white"
+                          >
+                            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM18 20H6V4H13V9H18V20Z" fill="currentColor" />
+                            </svg>
+                            ملف جديد
+                            <ContextMenuShortcut>Ctrl+N</ContextMenuShortcut>
+                          </ContextMenuItem>
+                          <ContextMenuItem 
+                            onClick={() => onCreateFile && onCreateFile(file.id, FileType.DIRECTORY)}
+                            className="hover:bg-[#2a2d2e] hover:text-white focus:bg-[#2a2d2e] focus:text-white"
+                          >
+                            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M2 6C2 4.89543 2.89543 4 4 4H9.5C10.0304 4 10.5391 4.21071 10.9142 4.58579L12 5.67157C12.3751 6.04665 12.8838 6.25736 13.4142 6.25736H20C21.1046 6.25736 22 7.15179 22 8.25736V18C22 19.1046 21.1046 20 20 20H4C2.89543 20 2 19.1046 2 18V6Z" fill="currentColor" />
+                            </svg>
+                            مجلد جديد
+                            <ContextMenuShortcut>Ctrl+Shift+N</ContextMenuShortcut>
+                          </ContextMenuItem>
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
                       <ContextMenuSeparator className="bg-[#3c3c3c]" />
                     </>
                   )}
@@ -184,4 +311,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   );
 };
 
-export default FileExplorer;
+// Wrap FileExplorer with DnD provider
+const DndFileExplorer: React.FC<FileExplorerProps> = (props) => {
+  return (
+    <DndProvider backend={HTML5Backend}>
+      <FileExplorer {...props} />
+    </DndProvider>
+  );
+};
+
+export default DndFileExplorer;
