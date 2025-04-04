@@ -98,15 +98,27 @@ const AuthPage: React.FC = () => {
     mutationFn: async (values: LoginValues) => {
       return apiRequest("POST", "/api/login", values);
     },
-    onSuccess: (response) => {
-      response.json().then(data => {
+    onSuccess: async (response) => {
+      try {
+        const userData = await response.json();
+        // تحديث بيانات المستخدم مباشرة في React Query لضمان التحديث الفوري
+        queryClient.setQueryData(['/api/user'], userData);
+        
         toast({
           title: "تم تسجيل الدخول بنجاح",
-          description: `مرحبًا ${data.username}! 👋`,
+          description: `مرحبًا ${userData.username}! 👋`,
         });
-        queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+        
+        // بفاصل زمني صغير للتأكد من حدوث التحديث أولاً
+        setTimeout(() => {
+          navigate('/');
+        }, 100);
+      } catch (err) {
+        console.error("Error parsing user data:", err);
+        // في حالة حدوث خطأ، سنعيد تحميل البيانات
+        await queryClient.invalidateQueries({ queryKey: ['/api/user'] });
         navigate('/');
-      });
+      }
     },
     onError: (error) => {
       toast({
@@ -123,15 +135,27 @@ const AuthPage: React.FC = () => {
       const { confirmPassword, ...registerData } = values;
       return apiRequest("POST", "/api/register", registerData);
     },
-    onSuccess: (response) => {
-      response.json().then(data => {
+    onSuccess: async (response) => {
+      try {
+        const userData = await response.json();
+        // تحديث بيانات المستخدم مباشرة في React Query لضمان التحديث الفوري
+        queryClient.setQueryData(['/api/user'], userData);
+        
         toast({
           title: "تم إنشاء الحساب بنجاح",
-          description: `مرحباً ${data.username}، تم إنشاء حسابك بنجاح!`,
+          description: `مرحباً ${userData.username}، تم إنشاء حسابك بنجاح!`,
         });
-        queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+        
+        // بفاصل زمني صغير للتأكد من حدوث التحديث أولاً
+        setTimeout(() => {
+          navigate('/');
+        }, 100);
+      } catch (err) {
+        console.error("Error parsing user data:", err);
+        // في حالة حدوث خطأ، سنعيد تحميل البيانات
+        await queryClient.invalidateQueries({ queryKey: ['/api/user'] });
         navigate('/');
-      });
+      }
     },
     onError: (error) => {
       toast({

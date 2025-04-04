@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { WebSocketServer } from "ws";
 import { WebSocket } from "ws";
 import { z } from "zod";
-import { insertUserSchema, insertProjectSchema, insertFileSchema, insertActivitySchema, User } from "@shared/schema";
+import { insertUserSchema, insertProjectSchema, insertFileSchema, insertActivitySchema, User, ProjectType } from "@shared/schema";
 import { randomBytes } from "crypto";
 import { setupAuth } from "./auth";
 
@@ -19,6 +19,66 @@ declare global {
 
 // Define an authenticated request type that ensures user is present
 type AuthenticatedRequest = Request & { user: User };
+
+// دوال مساعدة لمعلومات أنواع المشاريع
+function getProjectTypeName(type: string): string {
+  switch(type) {
+    case ProjectType.HTML: return 'HTML, CSS, JavaScript';
+    case ProjectType.REACT: return 'React';
+    case ProjectType.VUE: return 'Vue.js';
+    case ProjectType.ANGULAR: return 'Angular';
+    case ProjectType.NODEJS: return 'Node.js';
+    case ProjectType.PYTHON: return 'Python';
+    case ProjectType.PHP: return 'PHP';
+    case ProjectType.JAVA: return 'Java';
+    case ProjectType.GO: return 'Go';
+    case ProjectType.TYPESCRIPT: return 'TypeScript';
+    default: return type;
+  }
+}
+
+function getProjectTypeDescription(type: string): string {
+  switch(type) {
+    case ProjectType.HTML: 
+      return 'إنشاء موقع ويب باستخدام HTML و CSS و JavaScript الأساسية';
+    case ProjectType.REACT: 
+      return 'إطار عمل JavaScript لبناء واجهات المستخدم التفاعلية';
+    case ProjectType.VUE: 
+      return 'إطار عمل JavaScript تدريجي لبناء واجهات المستخدم';
+    case ProjectType.ANGULAR: 
+      return 'منصة لبناء تطبيقات ويب على نطاق واسع';
+    case ProjectType.NODEJS: 
+      return 'بيئة تشغيل JavaScript على الخادم';
+    case ProjectType.PYTHON: 
+      return 'لغة برمجة عامة الأغراض سهلة التعلم والاستخدام';
+    case ProjectType.PHP: 
+      return 'لغة برمجة مخصصة لتطوير الويب';
+    case ProjectType.JAVA: 
+      return 'لغة برمجة قوية وآمنة للتطبيقات متعددة المنصات';
+    case ProjectType.GO: 
+      return 'لغة مفتوحة المصدر مصممة للأداء العالي والتزامن';
+    case ProjectType.TYPESCRIPT: 
+      return 'امتداد لـ JavaScript يضيف الأنواع الثابتة والواجهات';
+    default: 
+      return 'نوع مشروع غير معروف';
+  }
+}
+
+function getProjectTypeIcon(type: string): string {
+  switch(type) {
+    case ProjectType.HTML: return 'html';
+    case ProjectType.REACT: return 'react';
+    case ProjectType.VUE: return 'vue';
+    case ProjectType.ANGULAR: return 'angular';
+    case ProjectType.NODEJS: return 'nodejs';
+    case ProjectType.PYTHON: return 'python';
+    case ProjectType.PHP: return 'php';
+    case ProjectType.JAVA: return 'java';
+    case ProjectType.GO: return 'go';
+    case ProjectType.TYPESCRIPT: return 'typescript';
+    default: return 'code';
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication with Passport
@@ -110,6 +170,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post('/api/projects', authenticate, async (req, res) => {
     try {
+      // تحقق من قيمة نوع المشروع
+      if (req.body.type && !Object.values(ProjectType).includes(req.body.type)) {
+        return res.status(400).json({ 
+          message: 'نوع المشروع غير صالح', 
+          validTypes: Object.values(ProjectType) 
+        });
+      }
+      
       const projectData = {
         ...req.body,
         ownerId: req.user!.id
@@ -118,19 +186,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertProjectSchema.parse(projectData);
       const project = await storage.createProject(validatedData);
       
-      // Create default files for the project based on type
+      // إنشاء الملفات الافتراضية بناءً على نوع المشروع
       await storage.createDefaultProjectFiles(project.id, project.type);
       
-      // Record activity
+      // تسجيل النشاط
       await storage.createActivity({
         title: `تم إنشاء مشروع "${project.name}"`,
         type: 'create',
-        details: 'تم إنشاء مشروع جديد',
+        details: `تم إنشاء مشروع جديد من نوع ${project.type}`,
         projectId: project.id,
         userId: req.user!.id
       });
       
-      // Get project with collaborators
+      // الحصول على المشروع مع المتعاونين
       const fullProject = await storage.getProjectById(project.id);
       
       res.status(201).json(fullProject);
@@ -138,6 +206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: 'Invalid input', errors: error.errors });
       }
+      console.error('Error creating project:', error);
       res.status(500).json({ message: 'Server error' });
     }
   });
@@ -394,6 +463,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const stats = await storage.getUserStats(req.user.id);
       res.json(stats);
     } catch (error) {
+      res.status(500).json({ message: 'Server error' });
+    }
+  });
+  
+  // الحصول على لغات البرمجة المدعومة
+  app.get('/api/project-types', (req, res) => {
+    try {
+      // إرجاع كل لغات البرمجة المدعومة مع وصف مختصر لكل منها
+      const supportedTypes = Object.values(ProjectType).map(type => ({
+        id: type,
+        name: getProjectTypeName(type),
+        description: getProjectTypeDescription(type),
+        icon: getProjectTypeIcon(type)
+      }));
+      
+      res.json(supportedTypes);
+    } catch (error) {
+      console.error('Error getting project types:', error);
       res.status(500).json({ message: 'Server error' });
     }
   });

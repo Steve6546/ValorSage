@@ -11,33 +11,75 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-  avatarUrl: true,
+// تعريف مخطط الإدخال لجدول المستخدمين
+export const insertUserSchema = z.object({
+  username: z.string().min(3).max(50),
+  password: z.string().min(6),
+  avatarUrl: z.string().optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
 // Projects
+// تعريف أنواع المشاريع (لغات البرمجة المدعومة)
+export const ProjectType = {
+  HTML: "html",
+  REACT: "react",
+  VUE: "vue",
+  ANGULAR: "angular",
+  NODEJS: "nodejs",
+  PYTHON: "python", // إضافة دعم بايثون
+  PHP: "php",       // إضافة دعم PHP
+  JAVA: "java",     // إضافة دعم جافا
+  GO: "go",         // إضافة دعم Go
+  TYPESCRIPT: "typescript", // إضافة دعم TypeScript
+} as const;
+
+export type ProjectType = typeof ProjectType[keyof typeof ProjectType];
+
+// تعريف حالات المشروع
+export const ProjectStatus = {
+  DRAFT: "draft",
+  PUBLISHED: "published",
+  ARCHIVED: "archived",
+} as const;
+
+export type ProjectStatus = typeof ProjectStatus[keyof typeof ProjectStatus];
+
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").default(""),
-  type: text("type").default("html").notNull(),
-  status: text("status").default("draft").notNull(),
+  type: text("type").default(ProjectType.HTML).notNull(),
+  status: text("status").default(ProjectStatus.DRAFT).notNull(),
   ownerId: integer("owner_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertProjectSchema = createInsertSchema(projects).pick({
-  name: true,
-  description: true,
-  type: true,
-  status: true,
-  ownerId: true,
+// تعريف مخطط الإدخال لجدول المشاريع
+export const insertProjectSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().optional().default(""),
+  type: z.union([
+    z.literal(ProjectType.HTML),
+    z.literal(ProjectType.REACT),
+    z.literal(ProjectType.VUE),
+    z.literal(ProjectType.ANGULAR),
+    z.literal(ProjectType.NODEJS),
+    z.literal(ProjectType.PYTHON),
+    z.literal(ProjectType.PHP),
+    z.literal(ProjectType.JAVA),
+    z.literal(ProjectType.GO),
+    z.literal(ProjectType.TYPESCRIPT)
+  ]).default(ProjectType.HTML),
+  status: z.union([
+    z.literal(ProjectStatus.DRAFT),
+    z.literal(ProjectStatus.PUBLISHED),
+    z.literal(ProjectStatus.ARCHIVED)
+  ]).default(ProjectStatus.DRAFT),
+  ownerId: z.number().int().positive(),
 });
 
 export type InsertProject = z.infer<typeof insertProjectSchema>;
@@ -52,20 +94,23 @@ export const projectCollaborators = pgTable("project_collaborators", {
   addedAt: timestamp("added_at").defaultNow().notNull(),
 });
 
-export const insertProjectCollaboratorSchema = createInsertSchema(projectCollaborators).pick({
-  projectId: true,
-  userId: true,
-  role: true,
+// تعريف مخطط الإدخال لجدول المتعاونين على المشاريع
+export const insertProjectCollaboratorSchema = z.object({
+  projectId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  role: z.string().default("editor"),
 });
 
 export type InsertProjectCollaborator = z.infer<typeof insertProjectCollaboratorSchema>;
 export type ProjectCollaborator = typeof projectCollaborators.$inferSelect;
 
 // Files
-export enum FileType {
-  FILE = "file",
-  DIRECTORY = "directory",
-}
+export const FileType = {
+  FILE: "file",
+  DIRECTORY: "directory",
+} as const;
+
+export type FileType = typeof FileType[keyof typeof FileType];
 
 export const files = pgTable("files", {
   id: serial("id").primaryKey(),
@@ -79,13 +124,14 @@ export const files = pgTable("files", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertFileSchema = createInsertSchema(files).pick({
-  name: true,
-  type: true,
-  extension: true,
-  content: true,
-  projectId: true,
-  parentId: true,
+// تعريف مخطط الإدخال لجدول الملفات
+export const insertFileSchema = z.object({
+  name: z.string().min(1).max(100),
+  type: z.union([z.literal(FileType.FILE), z.literal(FileType.DIRECTORY)]),
+  extension: z.string().optional(),
+  content: z.string().optional(),
+  projectId: z.number().int().positive(),
+  parentId: z.number().int().positive().optional().nullable(),
 });
 
 export type InsertFile = z.infer<typeof insertFileSchema>;
@@ -103,13 +149,14 @@ export const activities = pgTable("activities", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
-export const insertActivitySchema = createInsertSchema(activities).pick({
-  title: true,
-  type: true,
-  details: true,
-  projectId: true,
-  userId: true,
-  projectUrl: true,
+// تعريف مخطط الإدخال لجدول الأنشطة
+export const insertActivitySchema = z.object({
+  title: z.string(),
+  type: z.string(),
+  details: z.string().optional(),
+  projectId: z.number().int().positive().optional(),
+  userId: z.number().int().positive().optional(),
+  projectUrl: z.string().optional(),
 });
 
 export type InsertActivity = z.infer<typeof insertActivitySchema>;
