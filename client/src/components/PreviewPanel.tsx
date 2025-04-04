@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FileItem } from "@shared/schema";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PreviewPanelProps {
   files: FileItem[];
@@ -14,8 +15,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   onRefresh
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [activeTab, setActiveTab] = useState<string>("preview");
   
-  useEffect(() => {
+  // Combine files and render preview
+  const renderCombinedPreview = () => {
     if (!iframeRef.current) return;
     
     try {
@@ -35,10 +38,19 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         });
         
         if (styleContent) {
-          htmlContent = htmlContent.replace(
-            "</head>",
-            `<style>${styleContent}</style></head>`
-          );
+          // Check if there's a head tag
+          if (htmlContent.includes("</head>")) {
+            htmlContent = htmlContent.replace(
+              "</head>",
+              `<style>${styleContent}</style></head>`
+            );
+          } else {
+            // Add head tag if not present
+            htmlContent = htmlContent.replace(
+              "<html>",
+              "<html><head><style>" + styleContent + "</style></head>"
+            );
+          }
         }
         
         // Inject JS
@@ -48,10 +60,16 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         });
         
         if (scriptContent) {
-          htmlContent = htmlContent.replace(
-            "</body>",
-            `<script>${scriptContent}</script></body>`
-          );
+          // Check if there's a body tag
+          if (htmlContent.includes("</body>")) {
+            htmlContent = htmlContent.replace(
+              "</body>",
+              `<script>${scriptContent}</script></body>`
+            );
+          } else {
+            // Add body closing tag if not present
+            htmlContent += `<script>${scriptContent}</script></body>`;
+          }
         }
         
         // Write to iframe
@@ -71,7 +89,174 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       console.error("Error rendering preview:", error);
       showPlaceholder("حدث خطأ أثناء عرض المعاينة");
     }
-  }, [files, onRefresh]);
+  };
+  
+  // Render preview of single file
+  const renderSingleFilePreview = (file: FileItem) => {
+    if (!iframeRef.current || !file) return;
+    
+    try {
+      const iframe = iframeRef.current;
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      
+      if (iframeDoc) {
+        iframeDoc.open();
+        
+        // Render based on file type
+        switch (file.extension) {
+          case "html":
+            iframeDoc.write(file.content || "");
+            break;
+            
+          case "css":
+            iframeDoc.write(`
+              <html>
+                <head>
+                  <style>${file.content || ""}</style>
+                  <style>
+                    body {
+                      font-family: Arial, sans-serif;
+                      padding: 20px;
+                    }
+                    .css-preview {
+                      padding: 20px;
+                      border: 1px solid #ddd;
+                      border-radius: 4px;
+                    }
+                    h3 {
+                      margin-top: 0;
+                    }
+                    pre {
+                      background: #f5f5f5;
+                      padding: 10px;
+                      border-radius: 4px;
+                      overflow: auto;
+                    }
+                    .example {
+                      margin-top: 20px;
+                      padding: 20px;
+                      border: 1px dashed #ccc;
+                      border-radius: 4px;
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="css-preview">
+                    <h3>معاينة CSS: ${file.name}</h3>
+                    <pre>${file.content?.replace(/</g, "&lt;").replace(/>/g, "&gt;") || ""}</pre>
+                    <div class="example">
+                      <p>مثال لتطبيق النمط</p>
+                      <p style="color: blue;">هذا نص يطبق عليه النمط</p>
+                      <div style="width: 100px; height: 100px; background-color: #3b82f6;"></div>
+                    </div>
+                  </div>
+                </body>
+              </html>
+            `);
+            break;
+            
+          case "js":
+          case "jsx":
+            iframeDoc.write(`
+              <html>
+                <head>
+                  <style>
+                    body {
+                      font-family: Arial, sans-serif;
+                      padding: 20px;
+                    }
+                    .js-preview {
+                      padding: 20px;
+                      border: 1px solid #ddd;
+                      border-radius: 4px;
+                    }
+                    h3 {
+                      margin-top: 0;
+                    }
+                    pre {
+                      background: #f5f5f5;
+                      padding: 10px;
+                      border-radius: 4px;
+                      overflow: auto;
+                    }
+                    .output {
+                      margin-top: 20px;
+                      padding: 10px;
+                      background: #e9ecef;
+                      border-radius: 4px;
+                      min-height: 100px;
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="js-preview">
+                    <h3>معاينة JavaScript: ${file.name}</h3>
+                    <pre>${file.content?.replace(/</g, "&lt;").replace(/>/g, "&gt;") || ""}</pre>
+                    <h4>نتيجة التنفيذ:</h4>
+                    <div class="output" id="output"></div>
+                    <script>
+                      // Capture console.log
+                      (function() {
+                        const output = document.getElementById('output');
+                        const originalLog = console.log;
+                        
+                        console.log = function(...args) {
+                          originalLog.apply(console, args);
+                          
+                          const line = document.createElement('div');
+                          line.textContent = args.map(arg => 
+                            typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                          ).join(' ');
+                          
+                          output.appendChild(line);
+                        };
+                        
+                        // Execute the script in a try-catch block
+                        try {
+                          ${file.content || ""}
+                        } catch (error) {
+                          const errorLine = document.createElement('div');
+                          errorLine.style.color = 'red';
+                          errorLine.textContent = 'Error: ' + error.message;
+                          output.appendChild(errorLine);
+                        }
+                      })();
+                    </script>
+                  </div>
+                </body>
+              </html>
+            `);
+            break;
+            
+          default:
+            showPlaceholder(`لا يمكن معاينة ملفات بامتداد ${file.extension || 'غير معروف'}`);
+            break;
+        }
+        
+        iframeDoc.close();
+      }
+    } catch (error) {
+      console.error("Error rendering file preview:", error);
+      showPlaceholder("حدث خطأ أثناء عرض المعاينة");
+    }
+  };
+  
+  // Update preview when files change or refresh is triggered
+  useEffect(() => {
+    if (activeTab === "preview") {
+      renderCombinedPreview();
+    } else if (activeTab === "current" && selectedFile) {
+      renderSingleFilePreview(selectedFile);
+    }
+  }, [files, selectedFile, onRefresh, activeTab]);
+  
+  // Switch tabs when selected file changes
+  useEffect(() => {
+    if (selectedFile) {
+      // Auto switch to current file tab when a single file is selected
+      setActiveTab("current");
+    }
+  }, [selectedFile]);
   
   const showPlaceholder = (message = "نتائج الكود ستظهر هنا") => {
     if (!iframeRef.current) return;
@@ -138,11 +323,64 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   
   const openInNewWindow = () => {
     try {
-      const htmlFile = files.find(file => file.name === "index.html");
-      if (htmlFile) {
+      if (activeTab === "preview") {
+        const htmlFile = files.find(file => file.name === "index.html");
+        if (htmlFile) {
+          const previewWindow = window.open("", "_blank");
+          if (previewWindow) {
+            // Find all CSS and JS files
+            const cssFiles = files.filter(file => file.extension === "css");
+            const jsFiles = files.filter(file => file.extension === "js" || file.extension === "jsx");
+            
+            // Create a combined HTML document
+            let htmlContent = htmlFile.content || "";
+            
+            // Inject CSS
+            let styleContent = "";
+            cssFiles.forEach(cssFile => {
+              styleContent += cssFile.content || "";
+            });
+            
+            if (styleContent) {
+              htmlContent = htmlContent.replace(
+                "</head>",
+                `<style>${styleContent}</style></head>`
+              );
+            }
+            
+            // Inject JS
+            let scriptContent = "";
+            jsFiles.forEach(jsFile => {
+              scriptContent += jsFile.content || "";
+            });
+            
+            if (scriptContent) {
+              htmlContent = htmlContent.replace(
+                "</body>",
+                `<script>${scriptContent}</script></body>`
+              );
+            }
+            
+            previewWindow.document.write(htmlContent);
+            previewWindow.document.close();
+          }
+        }
+      } else if (activeTab === "current" && selectedFile) {
         const previewWindow = window.open("", "_blank");
-        if (previewWindow) {
-          previewWindow.document.write(htmlFile.content || "");
+        if (previewWindow && selectedFile.extension === "html") {
+          previewWindow.document.write(selectedFile.content || "");
+          previewWindow.document.close();
+        } else if (previewWindow) {
+          previewWindow.document.write(`
+            <html>
+              <head>
+                <title>${selectedFile.name}</title>
+              </head>
+              <body>
+                <pre>${selectedFile.content || ""}</pre>
+              </body>
+            </html>
+          `);
           previewWindow.document.close();
         }
       }
@@ -153,6 +391,26 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   return (
     <div className="flex flex-col h-full">
+      <div className="bg-[#252526] border-b border-[#3c3c3c] p-1">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="bg-[#2d2d2e] border border-[#3c3c3c]">
+            <TabsTrigger 
+              value="preview" 
+              className="text-xs data-[state=active]:bg-[#1e1e1e] data-[state=active]:text-white"
+            >
+              المعاينة الكاملة
+            </TabsTrigger>
+            <TabsTrigger 
+              value="current"
+              disabled={!selectedFile}
+              className="text-xs data-[state=active]:bg-[#1e1e1e] data-[state=active]:text-white"
+            >
+              {selectedFile ? selectedFile.name : 'الملف الحالي'}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      
       <div className="flex-1 h-full overflow-hidden flex flex-col">
         <iframe 
           ref={iframeRef}
@@ -161,9 +419,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
           sandbox="allow-scripts allow-same-origin"
         />
       </div>
+      
       <div className="bg-[#252526] border-t border-[#3c3c3c] p-2 flex justify-between items-center text-[#cccccc]">
         <div className="text-xs">
-          <span className="px-2 py-1 bg-[#2d2d2e] rounded">مشروع كودر التفاعلية</span>
+          <span className="px-2 py-1 bg-[#2d2d2e] rounded">
+            {activeTab === "preview" ? "المعاينة الكاملة" : selectedFile?.name}
+          </span>
         </div>
         <div className="flex space-x-2">
           <button 

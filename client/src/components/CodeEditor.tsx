@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FileItem } from "@shared/schema";
+import { EditorState, Extension } from "@codemirror/state";
+import { EditorView, keymap, lineNumbers, highlightActiveLineGutter } from "@codemirror/view";
+import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirror/commands";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { javascript } from "@codemirror/lang-javascript";
+import { html } from "@codemirror/lang-html";
+import { css } from "@codemirror/lang-css";
+import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter, indentOnInput, LanguageSupport } from "@codemirror/language";
+import { autocompletion, completionKeymap } from "@codemirror/autocomplete";
 
 interface CodeEditorProps {
   file: FileItem;
@@ -9,19 +18,6 @@ interface CodeEditorProps {
   onSelectFile: (fileId: number) => void;
 }
 
-// Line numbers component
-const LineNumbers: React.FC<{ count: number }> = ({ count }) => {
-  return (
-    <div className="select-none text-right pr-3 border-r border-[#3c3c3c] mr-4 text-[#6e768e] font-mono text-xs">
-      {Array.from({ length: Math.max(1, count) }, (_, i) => (
-        <div key={i + 1} className="leading-6 h-6">
-          {i + 1}
-        </div>
-      ))}
-    </div>
-  );
-};
-
 const CodeEditor: React.FC<CodeEditorProps> = ({
   file,
   openFiles,
@@ -29,25 +25,38 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   onCloseFile,
   onSelectFile
 }) => {
-  const [code, setCode] = useState<string>(file.content || "");
-  const [lineCount, setLineCount] = useState<number>(1);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
+  const [cursorPosition, setCursorPosition] = useState({ line: 1, col: 1 });
+  const [activeFileId, setActiveFileId] = useState<number>(file?.id || 0);
   
-  useEffect(() => {
-    setCode(file.content || "");
-    setLineCount((file.content?.split('\n').length || 0) + 1);
-  }, [file]);
-  
-  const handleCodeChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newCode = e.target.value;
-    setCode(newCode);
-    setLineCount(newCode.split('\n').length + 1);
-    onChangeCode(file.id, newCode);
+  // Function to get language extension based on file extension
+  const getLanguageExtension = (extension: string | undefined): Extension => {
+    const ext = extension?.toLowerCase() || "";
+    switch (ext) {
+      case "js":
+      case "jsx":
+      case "ts":
+      case "tsx":
+      case "json":
+        return javascript();
+      case "html":
+      case "htm":
+      case "xml":
+        return html();
+      case "css":
+      case "scss":
+      case "less":
+        return css();
+      default:
+        return new LanguageSupport(javascript().language);
+    }
   };
   
   // Function to get file extension based syntax highlighting class
   const getLanguageType = () => {
-    switch (file.extension) {
+    const extension = file?.extension || "";
+    switch (extension) {
       case "html": return "HTML";
       case "css": return "CSS";
       case "js": return "JavaScript";
@@ -56,34 +65,138 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       case "tsx": return "TypeScript React";
       case "json": return "JSON";
       case "md": return "Markdown";
-      default: return file.extension?.toUpperCase() || "Plain Text";
+      default: return extension.toUpperCase() || "Plain Text";
     }
   };
   
-  // Function to handle tab key in the editor
-  const handleTabKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const target = e.target as HTMLTextAreaElement;
-      const start = target.selectionStart;
-      const end = target.selectionEnd;
-      
-      // Insert 2 spaces for tab
-      const newCode = code.substring(0, start) + '  ' + code.substring(end);
-      setCode(newCode);
-      onChangeCode(file.id, newCode);
-      
-      // Move cursor to the right position after inserting tab
-      setTimeout(() => {
-        if (editorRef.current) {
-          editorRef.current.selectionStart = editorRef.current.selectionEnd = start + 2;
-        }
-      }, 0);
+  // Update cursor position
+  const updateCursorPosition = (view: EditorView) => {
+    const pos = view.state.selection.main.head;
+    const line = view.state.doc.lineAt(pos);
+    setCursorPosition({
+      line: line.number,
+      col: pos - line.from + 1
+    });
+  };
+  
+  // Create or update editor
+  useEffect(() => {
+    if (!editorContainerRef.current || !file) return;
+    
+    // If file has changed, destroy and recreate the editor
+    if (editorViewRef.current && activeFileId !== file.id) {
+      editorViewRef.current.destroy();
+      editorViewRef.current = null;
     }
+    
+    if (!editorViewRef.current) {
+      const startState = EditorState.create({
+        doc: file.content || "",
+        extensions: [
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          history(),
+          bracketMatching(),
+          autocompletion(),
+          foldGutter(),
+          indentOnInput(),
+          syntaxHighlighting(defaultHighlightStyle),
+          keymap.of([
+            ...defaultKeymap,
+            ...historyKeymap,
+            ...completionKeymap,
+            indentWithTab
+          ]),
+          oneDark,
+          getLanguageExtension(file.extension || ""),
+          EditorView.updateListener.of(update => {
+            if (update.docChanged) {
+              const doc = update.state.doc.toString();
+              onChangeCode(file.id, doc);
+            }
+            if (update.selectionSet) {
+              updateCursorPosition(update.view);
+            }
+          }),
+          EditorView.theme({
+            "&": {
+              height: "100%",
+              fontSize: "14px"
+            },
+            ".cm-scroller": {
+              overflow: "auto",
+              fontFamily: "Menlo, Monaco, 'Courier New', monospace"
+            },
+            ".cm-content": {
+              caretColor: "#fff"
+            }
+          })
+        ]
+      });
+      
+      const view = new EditorView({
+        state: startState,
+        parent: editorContainerRef.current
+      });
+      
+      editorViewRef.current = view;
+      setActiveFileId(file.id);
+      updateCursorPosition(view);
+    } else {
+      // Update the content if it's the same file but content changed externally
+      const currentContent = editorViewRef.current.state.doc.toString();
+      if (currentContent !== file.content) {
+        editorViewRef.current.dispatch({
+          changes: {
+            from: 0,
+            to: currentContent.length,
+            insert: file.content || ""
+          }
+        });
+      }
+    }
+    
+    return () => {
+      // Clean up only when component unmounts, not on every render
+      if (editorContainerRef.current === null) {
+        editorViewRef.current?.destroy();
+      }
+    };
+  }, [file, onChangeCode]);
+  
+  // File tabs component
+  const FileTabs = () => {
+    return (
+      <div className="flex bg-[#252526] border-b border-[#3c3c3c]">
+        {openFiles.map((openFile) => (
+          <div 
+            key={openFile.id}
+            className={`flex items-center group px-3 py-1.5 text-xs ${
+              openFile.id === file.id ? 'bg-[#1e1e1e] text-white font-medium' : 'text-[#969696] hover:text-white'
+            }`}
+            onClick={() => onSelectFile(openFile.id)}
+          >
+            <span className="truncate max-w-[120px]">{openFile.name}</span>
+            <button 
+              className="ml-2 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCloseFile(openFile.id);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
     <div className="flex-1 flex flex-col bg-[#1e1e1e] h-full overflow-hidden">
+      {/* File Tabs */}
+      <FileTabs />
+      
       {/* Editor Info Bar */}
       <div className="bg-[#1e1e1e] border-b border-[#3c3c3c] text-[#cccccc] text-xs px-4 py-1 flex items-center">
         <div className="flex space-x-2">
@@ -94,41 +207,15 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       </div>
       
       {/* Code Area */}
-      <div className="flex-1 overflow-auto flex bg-[#1e1e1e] text-[#cccccc]">
-        {/* Line Numbers */}
-        <LineNumbers count={lineCount} />
-        
-        {/* Editor */}
-        <div className="flex-1 relative overflow-hidden">
-          <textarea
-            ref={editorRef}
-            value={code}
-            onChange={handleCodeChange}
-            onKeyDown={handleTabKey}
-            className="absolute w-full h-full font-mono text-sm bg-transparent resize-none outline-none p-0 leading-6 text-[#cccccc] overflow-auto"
-            style={{ 
-              caretColor: '#ffffff',
-              tabSize: 2
-            }}
-            spellCheck="false"
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-          />
-          {/* This pre is just for styling reference, but we're not implementing real syntax highlighting here */}
-          <pre className="pointer-events-none absolute top-0 left-0 right-0 bottom-0 overflow-hidden opacity-0 font-mono text-sm leading-6">
-            {code}
-          </pre>
-        </div>
+      <div className="flex-1 overflow-hidden">
+        <div ref={editorContainerRef} className="h-full w-full" />
       </div>
       
       {/* Status Bar */}
       <div className="bg-[#007acc] text-white text-xs px-4 py-1 flex justify-between">
         <div>
-          <span className="mr-4">Line {code.split('\n').length}</span>
-          <span>Col {editorRef.current && typeof editorRef.current.selectionStart === 'number' 
-            ? editorRef.current.selectionStart - (code.lastIndexOf('\n', Math.max(0, editorRef.current.selectionStart - 1)) + 1) 
-            : 1}</span>
+          <span className="mr-4">Line {cursorPosition.line}</span>
+          <span>Col {cursorPosition.col}</span>
         </div>
         <div className="flex space-x-4">
           <span>Spaces: 2</span>
