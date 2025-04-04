@@ -17,6 +17,9 @@ declare global {
   }
 }
 
+// Define an authenticated request type that ensures user is present
+type AuthenticatedRequest = Request & { user: User };
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication with Passport
   setupAuth(app);
@@ -71,6 +74,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Middleware to check authentication
+  // Custom authenticate middleware that ensures req.user is defined
   const authenticate = (req: Request, res: Response, next: NextFunction) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: 'Authentication required' });
@@ -81,6 +85,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: 'User not found' });
     }
     
+    // At this point, TypeScript can be sure that req.user is defined
     next();
   };
   
@@ -96,7 +101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get('/api/projects/recent', authenticate, async (req, res) => {
     try {
-      const recentProjects = await storage.getRecentProjects(req.user.id, 4);
+      const recentProjects = await storage.getRecentProjects(req.user!.id, 4);
       res.json(recentProjects);
     } catch (error) {
       res.status(500).json({ message: 'Server error' });
@@ -107,7 +112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const projectData = {
         ...req.body,
-        ownerId: req.user.id
+        ownerId: req.user!.id
       };
       
       const validatedData = insertProjectSchema.parse(projectData);
@@ -122,7 +127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: 'create',
         details: 'تم إنشاء مشروع جديد',
         projectId: project.id,
-        userId: req.user.id
+        userId: req.user!.id
       });
       
       // Get project with collaborators

@@ -8,14 +8,17 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/use-auth";
+import { SunIcon, MoonIcon, ComputerIcon } from "lucide-react";
 
 const Navbar: React.FC = () => {
   const [location] = useLocation();
-  const { toggleTheme, theme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const { user, logoutMutation } = useAuth();
   const [searchText, setSearchText] = useState("");
 
@@ -66,12 +69,43 @@ const Navbar: React.FC = () => {
           </form>
           
           {/* Theme Toggle */}
-          <button 
-            onClick={toggleTheme} 
-            className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <i className={`${theme === 'dark' ? 'ri-moon-line' : 'ri-sun-line'}`}></i>
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                aria-label="Select theme"
+              >
+                {resolvedTheme === 'dark' ? (
+                  <MoonIcon className="h-5 w-5" />
+                ) : (
+                  <SunIcon className="h-5 w-5" />
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>المظهر</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as "light" | "dark" | "system")}>
+                <DropdownMenuRadioItem value="light">
+                  <div className="flex items-center">
+                    <SunIcon className="ml-2 h-4 w-4" />
+                    <span>فاتح</span>
+                  </div>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="dark">
+                  <div className="flex items-center">
+                    <MoonIcon className="ml-2 h-4 w-4" />
+                    <span>مظلم</span>
+                  </div>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="system">
+                  <div className="flex items-center">
+                    <ComputerIcon className="ml-2 h-4 w-4" />
+                    <span>النظام</span>
+                  </div>
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           
           {/* Notifications */}
           <DropdownMenu>

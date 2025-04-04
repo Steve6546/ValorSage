@@ -19,6 +19,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getQueryFn } from "../lib/queryClient";
 import { Label } from "@/components/ui/label";
 import { insertUserSchema, User } from "@shared/schema";
+import { EyeIcon, EyeOffIcon } from "lucide-react";
 
 // Extended schemas with validation
 const loginSchema = z.object({
@@ -40,6 +41,9 @@ type RegisterValues = z.infer<typeof registerSchema>;
 const AuthPage: React.FC = () => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string>("login");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [_, navigate] = useLocation();
 
   // Check if user is already logged in
@@ -191,12 +195,22 @@ const AuthPage: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="login-password">كلمة المرور</Label>
-                      <Input
-                        id="login-password"
-                        type="password"
-                        placeholder="أدخل كلمة المرور"
-                        {...loginForm.register("password")}
-                      />
+                      <div className="relative">
+                        <Input
+                          id="login-password"
+                          type={showLoginPassword ? "text" : "password"}
+                          placeholder="أدخل كلمة المرور"
+                          {...loginForm.register("password")}
+                        />
+                        <button
+                          type="button"
+                          className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-300"
+                          onClick={() => setShowLoginPassword(!showLoginPassword)}
+                          tabIndex={-1}
+                        >
+                          {showLoginPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+                        </button>
+                      </div>
                       {loginForm.formState.errors.password && (
                         <p className="text-sm text-red-500">
                           {loginForm.formState.errors.password.message}
@@ -245,12 +259,22 @@ const AuthPage: React.FC = () => {
 
                     <div className="space-y-2">
                       <Label htmlFor="register-password">كلمة المرور</Label>
-                      <Input
-                        id="register-password"
-                        type="password"
-                        placeholder="أدخل كلمة المرور"
-                        {...registerForm.register("password")}
-                      />
+                      <div className="relative">
+                        <Input
+                          id="register-password"
+                          type={showRegisterPassword ? "text" : "password"}
+                          placeholder="أدخل كلمة المرور"
+                          {...registerForm.register("password")}
+                        />
+                        <button
+                          type="button"
+                          className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-300"
+                          onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                          tabIndex={-1}
+                        >
+                          {showRegisterPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+                        </button>
+                      </div>
                       {registerForm.formState.errors.password && (
                         <p className="text-sm text-red-500">
                           {registerForm.formState.errors.password.message}
@@ -259,12 +283,22 @@ const AuthPage: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="register-confirm-password">تأكيد كلمة المرور</Label>
-                      <Input
-                        id="register-confirm-password"
-                        type="password"
-                        placeholder="أدخل كلمة المرور مرة أخرى"
-                        {...registerForm.register("confirmPassword")}
-                      />
+                      <div className="relative">
+                        <Input
+                          id="register-confirm-password"
+                          type={showConfirmPassword ? "text" : "password"}
+                          placeholder="أدخل كلمة المرور مرة أخرى"
+                          {...registerForm.register("confirmPassword")}
+                        />
+                        <button
+                          type="button"
+                          className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-300"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          tabIndex={-1}
+                        >
+                          {showConfirmPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+                        </button>
+                      </div>
                       {registerForm.formState.errors.confirmPassword && (
                         <p className="text-sm text-red-500">
                           {registerForm.formState.errors.confirmPassword.message}
