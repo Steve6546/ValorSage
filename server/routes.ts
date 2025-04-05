@@ -4,9 +4,20 @@ import { storage } from "./storage";
 import { WebSocketServer } from "ws";
 import { WebSocket } from "ws";
 import { z } from "zod";
-import { insertUserSchema, insertProjectSchema, insertFileSchema, insertActivitySchema, User, ProjectType } from "@shared/schema";
+import { 
+  insertUserSchema, 
+  insertProjectSchema, 
+  insertFileSchema, 
+  insertActivitySchema, 
+  insertExecutionSchema,
+  User, 
+  ProjectType, 
+  RuntimeLanguage, 
+  ExecutionStatus
+} from "@shared/schema";
 import { randomBytes } from "crypto";
 import { setupAuth } from "./auth";
+import { executeCode } from "./code-executor";
 
 // Extend Express Request to include authenticated user
 declare global {
@@ -467,6 +478,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Code execution routes
+  app.post('/api/execute', authenticate, async (req, res) => {
+    try {
+      const { code, language, projectId } = req.body;
+      
+      if (!code || !language || !projectId) {
+        return res.status(400).json({ 
+          message: 'Missing required fields', 
+          required: ['code', 'language', 'projectId'] 
+        });
+      }
+      
+      // تحقق من صلاحية لغة التنفيذ
+      if (!Object.values(RuntimeLanguage).includes(language)) {
+        return res.status(400).json({ 
+          message: 'لغة تنفيذ غير صالحة', 
+          validLanguages: Object.values(RuntimeLanguage) 
+        });
+      }
+      
+      // تحقق من وجود المشروع وصلاحية وصول المستخدم إليه
+      const project = await storage.getProjectById(projectId);
+      if (!project) {
+        return res.status(404).json({ message: 'المشروع غير موجود' });
+      }
+      
+      // تحقق من أن المستخدم لديه حق الوصول للمشروع
+      if (project.ownerId !== req.user.id && !await storage.isProjectCollaborator(projectId, req.user.id)) {
+        return res.status(403).json({ message: 'ليس لديك صلاحية للوصول إلى هذا المشروع' });
+      }
+      
+      // إنشاء سجل تنفيذ في قاعدة البيانات
+      const executionRecord = await storage.createExecution({
+        projectId,
+        userId: req.user.id,
+        language,
+        code,
+        status: ExecutionStatus.PENDING
+      });
+      
+      // تنفيذ الكود باستخدام مكتبة التنفيذ
+      const result = await executeCode({
+        code,
+        language,
+        projectId,
+        userId: req.user.id,
+        timeout: 10000 // 10 seconds timeout
+      });
+      
+      // تحديث سجل التنفيذ بالنتيجة
+      const updatedExecution = await storage.updateExecution(executionRecord.id, {
+        output: result.output,
+        error: result.error,
+        status: result.error ? ExecutionStatus.ERROR : ExecutionStatus.COMPLETED
+      });
+      
+      // تسجيل النشاط
+      await storage.createActivity({
+        title: 'تم تنفيذ كود',
+        type: 'execute',
+        details: `تم تنفيذ كود بلغة ${language} ${result.error ? 'مع أخطاء' : 'بنجاح'}`,
+        projectId,
+        userId: req.user.id
+      });
+      
+      res.json(updatedExecution);
+    } catch (error) {
+      console.error('Error executing code:', error);
+      res.status(500).json({ message: 'حدث خطأ أثناء تنفيذ الكود' });
+    }
+  });
+  
+  // الحصول على نتائج التنفيذ
+  app.get('/api/execute/:id', authenticate, async (req, res) => {
+    try {
+      const executionId = parseInt(req.params.id);
+      if (isNaN(executionId)) {
+        return res.status(400).json({ message: 'معرف تنفيذ غير صالح' });
+      }
+      
+      const execution = await storage.getExecutionById(executionId);
+      if (!execution) {
+        return res.status(404).json({ message: 'سجل التنفيذ غير موجود' });
+      }
+      
+      // تحقق من وجود المشروع وصلاحية وصول المستخدم إليه
+      const project = await storage.getProjectById(execution.projectId);
+      if (!project) {
+        return res.status(404).json({ message: 'المشروع غير موجود' });
+      }
+      
+      // تحقق من أن المستخدم لديه حق الوصول للمشروع
+      if (project.ownerId !== req.user.id && !await storage.isProjectCollaborator(execution.projectId, req.user.id)) {
+        return res.status(403).json({ message: 'ليس لديك صلاحية للوصول إلى نتائج هذا التنفيذ' });
+      }
+      
+      res.json(execution);
+    } catch (error) {
+      console.error('Error fetching execution:', error);
+      res.status(500).json({ message: 'حدث خطأ أثناء الحصول على نتائج التنفيذ' });
+    }
+  });
+  
+
+  
   // الحصول على لغات البرمجة المدعومة
   app.get('/api/project-types', (req, res) => {
     try {
@@ -481,6 +597,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(supportedTypes);
     } catch (error) {
       console.error('Error getting project types:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  });
+  
+  // Code Execution API Routes
+  
+  // Get supported languages for execution
+  app.get('/api/languages', (req, res) => {
+    try {
+      const supportedLanguages = Object.values(RuntimeLanguage).map(lang => ({
+        id: lang,
+        name: lang.charAt(0).toUpperCase() + lang.slice(1),
+        supported: true
+      }));
+      
+      res.json(supportedLanguages);
+    } catch (error) {
+      console.error('Error getting supported languages:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  });
+  
+  // Create a new execution
+  app.post('/api/executions', authenticate, async (req, res) => {
+    try {
+      const { code, language, projectId, fileId, input } = req.body;
+      
+      if (!code || !language || !projectId || !fileId) {
+        return res.status(400).json({ 
+          message: 'Missing required parameters: code, language, projectId, fileId'
+        });
+      }
+      
+      // Validate language is supported
+      if (!Object.values(RuntimeLanguage).includes(language)) {
+        return res.status(400).json({ 
+          message: 'Unsupported language',
+          supportedLanguages: Object.values(RuntimeLanguage)
+        });
+      }
+      
+      // Get the project and check if user has access
+      const project = await storage.getProjectById(projectId);
+      if (!project) {
+        return res.status(404).json({ message: 'Project not found' });
+      }
+      
+      if (project.ownerId !== req.user.id && 
+          !await storage.isProjectCollaborator(projectId, req.user.id)) {
+        return res.status(403).json({ message: 'Access denied to this project' });
+      }
+      
+      // Get the file and check if it exists in the project
+      const file = await storage.getFileById(fileId);
+      if (!file) {
+        return res.status(404).json({ message: 'File not found' });
+      }
+      
+      if (file.projectId !== projectId) {
+        return res.status(400).json({ message: 'File does not belong to this project' });
+      }
+      
+      // Execute the code
+      const executionResult = await executeCode({
+        code,
+        language,
+        input,
+        projectId,
+        fileId,
+        userId: req.user.id
+      });
+      
+      res.status(201).json(executionResult);
+      
+    } catch (error) {
+      console.error('Error executing code:', error);
+      res.status(500).json({ message: 'Server error executing code' });
+    }
+  });
+  
+  // Get recent executions for a project
+  app.get('/api/projects/:projectId/executions', authenticate, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      if (isNaN(projectId)) {
+        return res.status(400).json({ message: 'Invalid project ID' });
+      }
+      
+      // Check if user has access to the project
+      const project = await storage.getProjectById(projectId);
+      if (!project) {
+        return res.status(404).json({ message: 'Project not found' });
+      }
+      
+      if (project.ownerId !== req.user.id && 
+          !await storage.isProjectCollaborator(projectId, req.user.id)) {
+        return res.status(403).json({ message: 'Access denied to this project' });
+      }
+      
+      // Get executions with limit if provided
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const executions = await storage.getProjectExecutions(projectId, limit);
+      
+      res.json(executions);
+    } catch (error) {
+      console.error('Error getting project executions:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  });
+  
+  // Get a specific execution by ID
+  app.get('/api/executions/:id', authenticate, async (req, res) => {
+    try {
+      const executionId = parseInt(req.params.id);
+      if (isNaN(executionId)) {
+        return res.status(400).json({ message: 'Invalid execution ID' });
+      }
+      
+      const execution = await storage.getExecutionById(executionId);
+      if (!execution) {
+        return res.status(404).json({ message: 'Execution not found' });
+      }
+      
+      // Check if user has access to the execution's project
+      const project = await storage.getProjectById(execution.projectId);
+      if (!project) {
+        return res.status(404).json({ message: 'Project not found' });
+      }
+      
+      if (project.ownerId !== req.user.id && 
+          !await storage.isProjectCollaborator(execution.projectId, req.user.id)) {
+        return res.status(403).json({ message: 'Access denied to this execution' });
+      }
+      
+      res.json(execution);
+    } catch (error) {
+      console.error('Error getting execution:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  });
+  
+  // Get user's recent executions
+  app.get('/api/user/executions', authenticate, async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const executions = await storage.getUserExecutions(req.user.id, limit);
+      
+      res.json(executions);
+    } catch (error) {
+      console.error('Error getting user executions:', error);
       res.status(500).json({ message: 'Server error' });
     }
   });
