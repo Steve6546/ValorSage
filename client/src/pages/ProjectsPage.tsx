@@ -45,7 +45,13 @@ const ProjectsPage: React.FC = () => {
       return response.json();
     },
     onSuccess: (data) => {
+      // تحديث جميع البيانات المرتبطة بالمشاريع والأنشطة في جميع الصفحات
       queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects/recent'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/activities'] });
+      
+      console.log("تم إنشاء مشروع جديد بنجاح:", data);
+      
       showNotification({
         id: Date.now().toString(),
         type: "success",
@@ -53,6 +59,7 @@ const ProjectsPage: React.FC = () => {
         message: "تم إنشاء المشروع بنجاح",
         duration: 3000,
       });
+      
       setNewProjectOpen(false);
       navigate(`/ide/${data.id}`);
     },
@@ -75,7 +82,13 @@ const ProjectsPage: React.FC = () => {
       return id;
     },
     onSuccess: (id) => {
+      // تحديث جميع البيانات المرتبطة بالمشاريع والأنشطة في جميع الصفحات
       queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects/recent'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/activities'] });
+      
+      console.log("تم حذف المشروع بنجاح:", id);
+      
       showNotification({
         id: Date.now().toString(),
         type: "success",

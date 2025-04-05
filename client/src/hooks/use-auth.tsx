@@ -120,17 +120,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Logout mutation
   const logoutMutation = useMutation<Response, Error, void>({
     mutationFn: async () => {
+      // تنفيذ طلب تسجيل الخروج إلى الخادم
       return await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      // حذف بيانات المستخدم من الذاكرة المؤقتة أولاً
       queryClient.setQueryData(["/api/user"], null);
+      
+      // ثم تحديث الاستعلام
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      
+      // عرض إشعار للمستخدم
       toast({
         title: "تم تسجيل الخروج",
         description: "نتمنى لك يوماً سعيداً!",
       });
+      
+      console.log("تم تسجيل الخروج بنجاح");
     },
     onError: (error: Error) => {
+      console.error("فشل تسجيل الخروج:", error);
+      
       toast({
         title: "فشل تسجيل الخروج",
         description: "حدث خطأ أثناء تسجيل الخروج. يرجى المحاولة مرة أخرى.",
