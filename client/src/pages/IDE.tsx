@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import FileExplorer from "@/components/FileExplorer";
 import CodeEditor from "@/components/CodeEditor";
@@ -7,8 +7,17 @@ import PreviewPanel from "@/components/PreviewPanel";
 import CreationDialog from "@/components/CreationDialog";
 import { useNotification } from "@/contexts/NotificationContext";
 import { useWebSocket } from "@/lib/websocket";
-import { FileItem, Project, ProjectWithCollaborators, FileType } from "@shared/schema";
+import { 
+  FileItem, 
+  Project, 
+  ProjectWithCollaborators, 
+  FileType, 
+  RuntimeLanguage, 
+  Execution,
+  ExecutionStatus
+} from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
 
 interface IDEParams {
   id: string;
@@ -19,6 +28,7 @@ const IDE: React.FC = () => {
   const projectId = parseInt(id);
   const { showNotification } = useNotification();
   const socket = useWebSocket();
+  const { user } = useAuth();
   
   const [selectedFile, setSelectedFile] = useState<FileItem | undefined>(undefined);
   const [openFiles, setOpenFiles] = useState<FileItem[]>([]);
@@ -30,6 +40,11 @@ const IDE: React.FC = () => {
     resourceType: FileType;
     parentFolderName?: string;
   }>({ parentId: null, resourceType: FileType.FILE });
+  
+  // تنفيذ الكود
+  const [executionResult, setExecutionResult] = useState<Execution | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isOutputVisible, setIsOutputVisible] = useState(false);
   
   // Fetch project details
   const { data: project, isLoading: projectLoading } = useQuery<ProjectWithCollaborators>({
@@ -355,6 +370,85 @@ const IDE: React.FC = () => {
     setRefreshPreview(prev => prev + 1);
   };
   
+  // دالة تنفيذ الكود
+  const executeMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedFile || !user) return null;
+      
+      // تحديد لغة التنفيذ بناء على امتداد الملف
+      let language: RuntimeLanguage;
+      switch (selectedFile.extension?.toLowerCase()) {
+        case 'py':
+          language = RuntimeLanguage.PYTHON;
+          break;
+        case 'js':
+          language = RuntimeLanguage.JAVASCRIPT;
+          break;
+        case 'html':
+          language = RuntimeLanguage.HTML;
+          break;
+        case 'css':
+          language = RuntimeLanguage.CSS;
+          break;
+        default:
+          // اختيار جافاسكريبت كلغة افتراضية
+          language = RuntimeLanguage.JAVASCRIPT;
+      }
+      
+      const response = await apiRequest(
+        "POST", 
+        "/api/execute", 
+        {
+          code: selectedFile.content || "",
+          language,
+          projectId,
+          userId: user.id
+        }
+      );
+      
+      return await response.json();
+    },
+    onSuccess: (data: Execution) => {
+      setExecutionResult(data);
+      setIsOutputVisible(true);
+      
+      showNotification({
+        id: Date.now().toString(),
+        type: data.error ? "error" : "success",
+        title: data.error ? "خطأ في التنفيذ" : "تم التنفيذ بنجاح",
+        message: data.error ? "حدث خطأ أثناء تنفيذ الكود" : "تم تنفيذ الكود بنجاح",
+        duration: 3000,
+      });
+    },
+    onError: (error) => {
+      console.error("Error executing code:", error);
+      
+      showNotification({
+        id: Date.now().toString(),
+        type: "error",
+        title: "خطأ في التنفيذ",
+        message: "حدث خطأ أثناء تنفيذ الكود",
+        duration: 3000,
+      });
+    }
+  });
+  
+  const handleRunCode = () => {
+    if (!selectedFile) {
+      showNotification({
+        id: Date.now().toString(),
+        type: "error",
+        title: "خطأ",
+        message: "يرجى اختيار ملف للتنفيذ",
+        duration: 3000,
+      });
+      return;
+    }
+    
+    setIsExecuting(true);
+    executeMutation.mutate();
+  };
+  
   if (projectLoading || filesLoading) {
     return <div className="container mx-auto px-4 py-8">جاري التحميل...</div>;
   }
@@ -373,7 +467,12 @@ const IDE: React.FC = () => {
             <button className="px-3 py-1 rounded hover:bg-[#3c3c3c] transition-colors text-sm">File</button>
             <button className="px-3 py-1 rounded hover:bg-[#3c3c3c] transition-colors text-sm">Edit</button>
             <button className="px-3 py-1 rounded hover:bg-[#3c3c3c] transition-colors text-sm">View</button>
-            <button className="px-3 py-1 rounded hover:bg-[#3c3c3c] transition-colors text-sm">Run</button>
+            <button 
+              onClick={handleRunCode} 
+              className="px-3 py-1 rounded hover:bg-[#3c3c3c] transition-colors text-sm"
+            >
+              Run
+            </button>
             <button className="px-3 py-1 rounded hover:bg-[#3c3c3c] transition-colors text-sm">Share</button>
           </div>
         </div>
@@ -539,6 +638,57 @@ const IDE: React.FC = () => {
         resourceType={createDialogParams.resourceType}
         parentFolder={createDialogParams.parentFolderName}
       />
+      
+      {/* مخرجات تنفيذ الكود */}
+      {isOutputVisible && executionResult && (
+        <div className="fixed bottom-0 left-0 right-0 bg-[#1e1e1e] border-t border-[#3c3c3c] z-10">
+          <div className="p-2 bg-[#252526] flex justify-between items-center">
+            <h2 className="font-medium text-sm">
+              نتيجة التنفيذ - {executionResult.language} 
+              {executionResult.status === ExecutionStatus.COMPLETED && (
+                <span className="text-green-400 ml-2">✓ تم التنفيذ بنجاح</span>
+              )}
+              {executionResult.status === ExecutionStatus.ERROR && (
+                <span className="text-red-400 ml-2">✗ حدث خطأ</span>
+              )}
+            </h2>
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => setIsOutputVisible(false)}
+                className="p-1 text-[#6e6e6e] hover:text-white"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div className="p-4 max-h-[300px] overflow-auto font-mono text-sm whitespace-pre-wrap">
+            {executionResult.error ? (
+              <div className="text-red-400">
+                {executionResult.error}
+              </div>
+            ) : (
+              <div className="text-green-200">
+                {executionResult.output || 'لا توجد مخرجات'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* مؤشر التحميل أثناء التنفيذ */}
+      {isExecuting && !executionResult && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-[#252526] rounded p-6 flex flex-col items-center shadow-xl">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 animate-spin text-blue-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p>جاري تنفيذ الكود...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

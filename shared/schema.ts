@@ -196,3 +196,81 @@ export interface ProjectWithCollaborators extends Project {
 }
 
 export type RecentProject = ProjectWithCollaborators;
+
+// تعريف أنواع اللغات المدعومة للتنفيذ
+export const RuntimeLanguage = {
+  JAVASCRIPT: "javascript",
+  PYTHON: "python",
+  HTML: "html",
+  CSS: "css",
+  PHP: "php",
+  JAVA: "java",
+  CPP: "cpp",
+  CSHARP: "csharp",
+  RUBY: "ruby",
+  GO: "go",
+  RUST: "rust",
+  TYPESCRIPT: "typescript",
+} as const;
+
+export type RuntimeLanguage = typeof RuntimeLanguage[keyof typeof RuntimeLanguage];
+
+// حالات التنفيذ
+export const ExecutionStatus = {
+  PENDING: "pending",
+  RUNNING: "running",
+  COMPLETED: "completed",
+  ERROR: "error",
+  TIMEOUT: "timeout",
+} as const;
+
+export type ExecutionStatus = typeof ExecutionStatus[keyof typeof ExecutionStatus];
+
+// جدول مخرجات التنفيذ
+export const executions = pgTable("executions", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  language: text("language").notNull(),
+  code: text("code").notNull(),
+  status: text("status").default(ExecutionStatus.PENDING).notNull(),
+  output: text("output"),
+  error: text("error"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  memoryUsage: integer("memory_usage"),
+  cpuTime: integer("cpu_time"),
+});
+
+// تعريف مخطط الإدخال لجدول التنفيذ
+export const insertExecutionSchema = z.object({
+  projectId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  language: z.union([
+    z.literal(RuntimeLanguage.JAVASCRIPT),
+    z.literal(RuntimeLanguage.PYTHON),
+    z.literal(RuntimeLanguage.HTML),
+    z.literal(RuntimeLanguage.CSS),
+    z.literal(RuntimeLanguage.PHP),
+    z.literal(RuntimeLanguage.JAVA),
+    z.literal(RuntimeLanguage.CPP),
+    z.literal(RuntimeLanguage.CSHARP),
+    z.literal(RuntimeLanguage.RUBY),
+    z.literal(RuntimeLanguage.GO),
+    z.literal(RuntimeLanguage.RUST),
+    z.literal(RuntimeLanguage.TYPESCRIPT),
+  ]),
+  code: z.string(),
+  status: z.union([
+    z.literal(ExecutionStatus.PENDING),
+    z.literal(ExecutionStatus.RUNNING),
+    z.literal(ExecutionStatus.COMPLETED),
+    z.literal(ExecutionStatus.ERROR),
+    z.literal(ExecutionStatus.TIMEOUT),
+  ]).default(ExecutionStatus.PENDING),
+  output: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export type InsertExecution = z.infer<typeof insertExecutionSchema>;
+export type Execution = typeof executions.$inferSelect;

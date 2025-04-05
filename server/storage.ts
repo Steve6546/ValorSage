@@ -4,6 +4,7 @@ import {
   projectCollaborators, 
   files,
   activities,
+  executions,
   type User, 
   type InsertUser,
   type Project,
@@ -15,7 +16,11 @@ import {
   type InsertActivity,
   type Activity,
   type Collaborator,
-  type UsageStats
+  type UsageStats,
+  type InsertExecution,
+  type Execution,
+  type RuntimeLanguage,
+  type ExecutionStatus
 } from "@shared/schema";
 
 // interface for storage operations
@@ -62,6 +67,13 @@ export interface IStorage {
   
   // Stats Operations
   getUserStats(userId: number): Promise<UsageStats>;
+  
+  // Code Execution Operations
+  createExecution(execution: InsertExecution): Promise<Execution>;
+  getExecutionById(id: number): Promise<Execution | undefined>;
+  updateExecution(id: number, data: Partial<Execution>): Promise<Execution>;
+  getProjectExecutions(projectId: number, limit?: number): Promise<Execution[]>;
+  getUserExecutions(userId: number, limit?: number): Promise<Execution[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1374,6 +1386,93 @@ button {
         usedPercent: (collaboratorCount.count / 10) * 100
       }
     };
+  }
+  
+  // Code Execution Operations
+  async createExecution(execution: InsertExecution): Promise<Execution> {
+    const [newExecution] = await db
+      .insert(executions)
+      .values({
+        projectId: execution.projectId,
+        userId: execution.userId,
+        language: execution.language,
+        code: execution.code,
+        status: execution.status,
+        output: execution.output,
+        error: execution.error
+      })
+      .returning();
+    
+    return newExecution;
+  }
+  
+  async getExecutionById(id: number): Promise<Execution | undefined> {
+    const [execution] = await db.select().from(executions).where(eq(executions.id, id));
+    return execution;
+  }
+  
+  async updateExecution(id: number, data: Partial<Execution>): Promise<Execution> {
+    const { status, output, error, completedAt } = data;
+    const updateData: Record<string, any> = {};
+    
+    if (status !== undefined) updateData.status = status;
+    if (output !== undefined) updateData.output = output;
+    if (error !== undefined) updateData.error = error;
+    if (completedAt !== undefined) updateData.completedAt = completedAt;
+    
+    const [updatedExecution] = await db
+      .update(executions)
+      .set(updateData)
+      .where(eq(executions.id, id))
+      .returning();
+    
+    if (!updatedExecution) {
+      throw new Error(`Execution ${id} not found`);
+    }
+    
+    return updatedExecution;
+  }
+  
+  async getProjectExecutions(projectId: number, limit?: number): Promise<Execution[]> {
+    let result;
+    
+    if (limit) {
+      result = await db
+        .select()
+        .from(executions)
+        .where(eq(executions.projectId, projectId))
+        .orderBy(desc(executions.startedAt))
+        .limit(limit);
+    } else {
+      result = await db
+        .select()
+        .from(executions)
+        .where(eq(executions.projectId, projectId))
+        .orderBy(desc(executions.startedAt));
+    }
+    
+    return result;
+  }
+  
+  async getUserExecutions(userId: number, limit?: number): Promise<Execution[]> {
+    let result;
+    
+    if (limit) {
+      result = await db
+        .select()
+        .from(executions)
+        .where(eq(executions.userId, userId))
+        .orderBy(desc(executions.startedAt))
+        .limit(limit);
+    } else {
+      result = await db
+        .select()
+        .from(executions)
+        .where(eq(executions.userId, userId))
+        .orderBy(desc(executions.startedAt));
+    }
+    
+    return result;
   }
 }
 
