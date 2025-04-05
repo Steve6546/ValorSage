@@ -16,7 +16,22 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 const Dashboard: React.FC = () => {
   const { showNotification } = useNotification();
   const { user } = useAuth();
-  const [_, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  
+  // تحديث البيانات عند تحميل الصفحة أو العودة إليها
+  useEffect(() => {
+    // عند تحميل الصفحة، تأكد من تحديث البيانات
+    if (user) {
+      console.log("تحديث بيانات Dashboard للمستخدم:", user.username);
+      
+      // تحديث جميع البيانات المطلوبة في لوحة التحكم في كل مرة يتم فيها عرض الصفحة
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects/recent'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/activities'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/usage'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/collaborators'] });
+    }
+  }, [user, location]); // إضافة location للتحديث عند تغيير الصفحة والعودة للداشبورد
   
   // Fetch recent projects
   const { data: projects = [], isLoading: projectsLoading } = useQuery<RecentProject[]>({
@@ -49,9 +64,13 @@ const Dashboard: React.FC = () => {
       return id;
     },
     onSuccess: (id) => {
-      // Invalidate queries to refresh data
+      // تحديث جميع البيانات المرتبطة بالمشاريع والأنشطة في جميع الصفحات
       queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
       queryClient.invalidateQueries({ queryKey: ['/api/projects/recent'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/activities'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/usage'] });
+      
+      console.log("تم حذف المشروع بنجاح:", id);
       
       showNotification({
         id: Date.now().toString(),

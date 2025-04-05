@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { SunIcon, MoonIcon, ComputerIcon } from "lucide-react";
 
 const Navbar: React.FC = () => {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { user, logoutMutation } = useAuth();
   const [searchText, setSearchText] = useState("");
@@ -156,7 +156,16 @@ const Navbar: React.FC = () => {
                     الإعدادات
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => logoutMutation.mutate()} className="text-red-500 hover:text-red-600">
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      logoutMutation.mutate();
+                      // انتظر لحظة قصيرة للتأكد من اكتمال العملية ثم قم بإعادة التوجيه
+                      setTimeout(() => {
+                        navigate('/auth');
+                      }, 300);
+                    }} 
+                    className="text-red-500 hover:text-red-600"
+                  >
                     <i className="ri-logout-box-line ml-2"></i>
                     تسجيل الخروج
                   </DropdownMenuItem>
