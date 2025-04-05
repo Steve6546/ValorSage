@@ -8,10 +8,22 @@ import UsageStatsComponent from "@/components/UsageStats";
 import CollaboratorItem from "@/components/CollaboratorItem";
 import QuickLinks from "@/components/QuickLinks";
 import { useNotification } from "@/contexts/NotificationContext";
-import { RecentProject, Activity, UsageStats, Collaborator, Project } from "@shared/schema";
+import { RecentProject, Activity, UsageStats, Collaborator, Project, ProjectType } from "@shared/schema";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Dashboard: React.FC = () => {
   const { showNotification } = useNotification();
@@ -93,8 +105,71 @@ const Dashboard: React.FC = () => {
     }
   });
   
+  // استيراد أدوات نافذة الحوار
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProject, setNewProject] = useState({
+    name: "",
+    description: "",
+    type: "html"
+  });
+  
+  // Create project mutation
+  const createProjectMutation = useMutation({
+    mutationFn: async (projectData: { name: string; description: string; type: string }) => {
+      const response = await apiRequest("POST", "/api/projects", projectData);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      // تحديث جميع البيانات المرتبطة بالمشاريع والأنشطة في جميع الصفحات
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects/recent'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/activities'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/usage'] });
+      
+      console.log("تم إنشاء مشروع جديد بنجاح:", data);
+      
+      showNotification({
+        id: Date.now().toString(),
+        type: "success",
+        title: "تم الإنشاء",
+        message: "تم إنشاء المشروع بنجاح",
+        duration: 3000,
+      });
+      
+      setNewProjectOpen(false);
+      navigate(`/ide/${data.id}`);
+    },
+    onError: (error) => {
+      console.error("Error creating project:", error);
+      showNotification({
+        id: Date.now().toString(),
+        type: "error",
+        title: "خطأ",
+        message: "حدث خطأ أثناء إنشاء المشروع",
+        duration: 3000,
+      });
+    }
+  });
+  
+  const handleCreateProjectSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProject.name.trim()) {
+      showNotification({
+        id: Date.now().toString(),
+        type: "error",
+        title: "خطأ",
+        message: "يرجى إدخال اسم المشروع",
+        duration: 3000,
+      });
+      return;
+    }
+    
+    createProjectMutation.mutate(newProject);
+  };
+  
+  // فتح نافذة إنشاء مشروع جديد
   const handleCreateProject = () => {
-    navigate("/projects/new");
+    setNewProjectOpen(true);
   };
   
   const handleImportProject = () => {
@@ -287,6 +362,70 @@ const Dashboard: React.FC = () => {
           </Card>
         </div>
       </div>
+      
+      {/* نافذة إنشاء مشروع جديد */}
+      <Dialog open={newProjectOpen} onOpenChange={setNewProjectOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>إنشاء مشروع جديد</DialogTitle>
+            <DialogDescription>
+              املأ التفاصيل التالية لإنشاء مشروع جديد
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handleCreateProjectSubmit}>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="project-name">اسم المشروع</Label>
+                <Input
+                  id="project-name"
+                  placeholder="أدخل اسم المشروع"
+                  value={newProject.name}
+                  onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="project-description">وصف المشروع</Label>
+                <Textarea
+                  id="project-description"
+                  placeholder="أدخل وصفاً مختصراً للمشروع"
+                  value={newProject.description}
+                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="project-type">نوع المشروع</Label>
+                <Select
+                  value={newProject.type}
+                  onValueChange={(value) => setNewProject({ ...newProject, type: value })}
+                >
+                  <SelectTrigger id="project-type">
+                    <SelectValue placeholder="اختر نوع المشروع" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="html">HTML / CSS / JavaScript</SelectItem>
+                    <SelectItem value="react">React</SelectItem>
+                    <SelectItem value="vue">Vue</SelectItem>
+                    <SelectItem value="nodejs">Node.js</SelectItem>
+                    <SelectItem value="typescript">TypeScript</SelectItem>
+                    <SelectItem value="python">Python</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <DialogFooter className="mt-4">
+              <ButtonRipple type="submit" disabled={createProjectMutation.isPending}>
+                {createProjectMutation.isPending ? "جارِ الإنشاء..." : "إنشاء المشروع"}
+              </ButtonRipple>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 };
