@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { 
   Card, 
   CardContent
@@ -20,6 +20,7 @@ interface ProjectCardProps {
 }
 
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, onProjectDelete }) => {
+  const [_, navigate] = useLocation();
   const getIconForType = (type: string) => {
     switch (type) {
       case "html":
@@ -67,9 +68,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onProjectDelete }) =
     }
   };
   
-  const formatLastUpdated = (date: string) => {
+  const formatLastUpdated = (date: Date | string) => {
     const now = new Date();
-    const updated = new Date(date);
+    const updated = date instanceof Date ? date : new Date(date);
     const diffTime = Math.abs(now.getTime() - updated.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
@@ -84,9 +85,15 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onProjectDelete }) =
   };
   
   return (
-    <Card className="group bg-gray-50 dark:bg-gray-750 border border-gray-200 dark:border-gray-700 hover:border-primary-400 dark:hover:border-primary-500 transition-all hover:shadow-md cursor-pointer relative">
+    <Card 
+      className="group bg-gray-50 dark:bg-gray-750 border border-gray-200 dark:border-gray-700 hover:border-primary-400 dark:hover:border-primary-500 transition-all hover:shadow-md cursor-pointer relative"
+      onClick={() => navigate(`/ide/${project.id}`)}
+    >
       <CardContent className="p-4">
-        <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div 
+          className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={(e) => e.stopPropagation()}
+        >
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
@@ -94,7 +101,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onProjectDelete }) =
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => window.location.href = `/ide/${project.id}`}>
+              <DropdownMenuItem onClick={() => navigate(`/ide/${project.id}`)}>
                 فتح في المحرر
               </DropdownMenuItem>
               <DropdownMenuItem>
