@@ -101,13 +101,10 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createUser(insertUser: InsertUser): Promise<User> {
+    // استخدام الكائن المدخل مباشرة بدون استخراج الحقول بشكل يدوي
     const [user] = await db
       .insert(users)
-      .values({
-        username: insertUser.username,
-        password: insertUser.password,
-        avatarUrl: insertUser.avatarUrl
-      })
+      .values(insertUser)
       .returning();
     return user;
   }
@@ -230,15 +227,10 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createProject(project: InsertProject): Promise<Project> {
+    // استخدام الكائن المدخل مباشرة بدون استخراج الحقول بشكل يدوي
     const [newProject] = await db
       .insert(projects)
-      .values({
-        name: project.name,
-        description: project.description || "",
-        type: project.type,
-        status: project.status,
-        ownerId: project.ownerId
-      })
+      .values(project)
       .returning();
     return newProject;
   }
@@ -361,16 +353,10 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createFile(file: InsertFile): Promise<FileItem> {
+    // استخدام الكائن المدخل مباشرة بدون استخراج الحقول بشكل يدوي
     const [newFile] = await db
       .insert(files)
-      .values({
-        name: file.name,
-        type: file.type, 
-        extension: file.extension,
-        content: file.content,
-        projectId: file.projectId,
-        parentId: file.parentId
-      })
+      .values(file)
       .returning();
     return newFile;
   }
